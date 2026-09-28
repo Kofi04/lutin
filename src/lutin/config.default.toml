@@ -1,0 +1,54 @@
+# Configuration de Lutin.
+# Copié dans %APPDATA%\Lutin\config.toml au premier lancement. Modifiez-le
+# là-bas, puis choisissez « Recharger la configuration » dans le menu du lutin :
+# aucun redémarrage n'est nécessaire.
+#
+# Les noms de sections et de clés restent en anglais : ce sont des identifiants,
+# pas du texte affiché.
+
+[appearance]
+scale = 1.0                      # taille du lutin, de 0.5 à 4.0
+opacity = 0.96                   # opacité, de 0.2 à 1.0
+offset_x = 0                     # décalage droite (+) / gauche (-)
+offset_y = 0                     # décalage bas (+) / haut (-)
+click_through_when_idle = false  # laisser les clics traverser vers la fenêtre du dessous
+
+[hotkeys]
+# Modificateurs : ctrl, alt, shift, win. Touches : a-z, 0-9, f1-f24,
+# space, tab, escape, enter, insert, delete, home, end.
+quick_note = "ctrl+alt+N"
+clipboard = "ctrl+alt+V"
+launcher = "ctrl+alt+Space"
+toggle_avatar = "ctrl+alt+A"
+
+[monitor]
+enabled = true
+interval_seconds = 3.0
+cpu_busy = 65.0        # au-dessus, le lutin a l'air occupé
+cpu_stressed = 88.0    # au-dessus, il a l'air stressé
+ram_stressed = 88.0
+battery_low = 20       # en dessous, sur batterie, il a l'air fatigué
+
+[clipboard]
+enabled = true
+max_entries = 200        # les entrées plus anciennes sont purgées automatiquement
+max_text_length = 20000  # ignorer les textes plus longs (évite de stocker de gros collages)
+
+# Entrées du lanceur. « target » accepte tout ce que la boîte Exécuter accepte :
+# un exécutable, un document, un dossier, un raccourci shell: ou une URL.
+# Ajoutez autant de blocs que vous voulez.
+[[launcher]]
+label = "VS Code"
+target = "code"
+
+[[launcher]]
+label = "Terminal"
+target = "wt.exe"
+
+[[launcher]]
+label = "Téléchargements"
+target = "shell:Downloads"
+
+[[launcher]]
+label = "Claude"
+target = "https://claude.ai"

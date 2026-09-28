@@ -1,0 +1,11 @@
+# Normalise line endings in the repository: LF is stored, the working copy
+# gets whatever the platform expects. Without this, the checkout depends on
+# each machine's core.autocrlf setting.
+* text=auto eol=lf
+
+# Windows-only scripts are more predictable with CRLF in the working copy.
+*.ps1 text eol=crlf
+
+# Never let Git touch these.
+*.ico binary
+*.png binary
