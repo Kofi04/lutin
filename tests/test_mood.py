@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from lutin.config import MonitorSettings
-from lutin.features.monitor import Mood, Sample, mood_for
+from lutin.features.monitor import Sample, mood_for
+from lutin.mood import Mood, claude_mood_for, combine
 from lutin.winapi import CpuSampler
 
 SETTINGS = MonitorSettings(
@@ -62,3 +63,44 @@ def test_cpu_sampler_first_reading_is_zero_and_stays_in_range():
 
     assert first == 0.0  # the first call only primes the baseline
     assert 0.0 <= second <= 100.0
+
+
+# -- Claude moods vs machine moods -----------------------------------------
+
+
+def test_no_claude_activity_leaves_the_machine_mood_alone():
+    assert combine(Mood.BUSY, None) is Mood.BUSY
+
+
+def test_a_waiting_session_outranks_a_busy_machine():
+    # The whole point: one needs an answer, the other is just weather.
+    assert combine(Mood.STRESSED, Mood.WAITING) is Mood.WAITING
+
+
+def test_waiting_outranks_every_other_claude_state():
+    assert claude_mood_for(["working", "waiting", "done"]) is Mood.WAITING
+
+
+def test_error_outranks_working():
+    assert claude_mood_for(["working", "error"]) is Mood.ERROR
+
+
+def test_thinking_counts_as_working():
+    assert claude_mood_for(["thinking"]) is Mood.WORKING
+
+
+def test_only_idle_sessions_mean_no_claude_mood():
+    assert claude_mood_for([]) is None
+    assert claude_mood_for(["idle", "idle"]) is None
+
+
+def test_a_finished_session_still_shows():
+    assert claude_mood_for(["done"]) is Mood.DONE
+
+
+def test_every_mood_can_be_drawn():
+    # A palette gap would paint the avatar with a KeyError at runtime.
+    from lutin.sprite import _PALETTE
+
+    for mood in Mood:
+        assert mood in _PALETTE, mood

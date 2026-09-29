@@ -26,6 +26,8 @@ from .branding import (
     INSTANCE_KEY,
     ORG_NAME,
 )
+from .bridge import HookServer
+from .bridge import installer as hooks_installer
 from .capture.controller import CaptureController
 from .claude import ClaudeSession, check_auth
 from .config import (
@@ -40,11 +42,14 @@ from .features.launcher import LaunchError, launch
 from .features.monitor import SystemMonitor
 from .features.timers import Reminder, TimerManager
 from .hotkeys import GlobalHotkeys
+from .mood import Mood, claude_mood_for, combine
+from .sessions import EVENT_STATES, SessionRegistry, describe
 from .storage import Storage
 from .tray import TrayIcon, app_icon
 from .ui import HistoryPanel, QuickNoteDialog, ReminderDialog
 from .ui_capture import CapturePreview
-from .ui_claude import ApprovalCard, AskPanel
+from .ui_claude import ApprovalCard, AskPanel, ToolRequest
+from .ui_hooks import HookDiffDialog, summarise_backup
 
 
 class AvatarApp:
@@ -97,6 +102,15 @@ class AvatarApp:
         self._approval_current: int | None = None
         self._auth_checked = False
 
+        self.sessions = SessionRegistry()
+        self.sessions.changed.connect(self._refresh_mood)
+        self._system_mood = Mood.CALM
+        self.bridge = HookServer()
+        self._hook_dialog: HookDiffDialog | None = None
+        # Approvals from the bridge answer a socket, not the SDK, so the
+        # queue has to remember which of the two a request came from.
+        self._bridge_requests: set[int] = set()
+
         self._note_dialog: QuickNoteDialog | None = None
         self._history: HistoryPanel | None = None
         self._reminder_dialog: ReminderDialog | None = None
@@ -131,6 +145,13 @@ class AvatarApp:
         winapi.set_app_user_model_id(APP_USER_MODEL_ID)
 
         self.tray.set_autostart(winapi.autostart_enabled())
+        self.tray.set_hooks_installed(hooks_installer.is_installed())
+        if not self.bridge.start():
+            self.tray.notify(
+                "Hooks",
+                f"Impossible d'ouvrir le canal : {self.bridge.error}",
+                warning=True,
+            )
         self.tray.show()
         self.avatar.show()
         self.monitor.start()
@@ -139,6 +160,7 @@ class AvatarApp:
         return self.qt.exec()
 
     def shutdown(self) -> None:
+        self.bridge.stop()
         self.claude.shutdown()
         self.hotkeys.unregister_all()
         self.monitor.stop()
@@ -177,6 +199,13 @@ class AvatarApp:
         self.claude.reset_answer.connect(self._on_claude_reset)
         self.claude.permission_requested.connect(self._on_permission_requested)
 
+        self.bridge.event.connect(self._on_hook_event)
+        self.bridge.decision_requested.connect(self._on_bridge_decision)
+        self.tray.install_hooks_requested.connect(lambda: self._manage_hooks(True))
+        self.tray.uninstall_hooks_requested.connect(
+            lambda: self._manage_hooks(False)
+        )
+
         self.tray.quick_note_requested.connect(self._open_quick_note)
         self.tray.clipboard_requested.connect(
             lambda: self._open_history(HistoryPanel.CLIPBOARD_TAB)
@@ -210,8 +239,14 @@ class AvatarApp:
     # -- actions ----------------------------------------------------------
 
     def _on_sample(self, sample, mood) -> None:
+        self._system_mood = mood
         self.tray.update_status(sample, mood)
-        self.avatar.set_mood(mood)
+        self._refresh_mood()
+
+    def _refresh_mood(self) -> None:
+        """A session waiting on you outranks a busy machine."""
+        claude = claude_mood_for([s.state for s in self.sessions.sessions])
+        self.avatar.set_mood(combine(self._system_mood, claude))
 
     def _on_timer_fired(self, reminder: Reminder) -> None:
         self.tray.notify("C'est l'heure", reminder.label)
@@ -315,9 +350,79 @@ class AvatarApp:
 
     def _on_approval_decided(self, decision: str) -> None:
         request_id, self._approval_current = self._approval_current, None
-        if request_id is not None:
+        if request_id is None:
+            self._show_next_approval()
+            return
+
+        if request_id in self._bridge_requests:
+            self._bridge_requests.discard(request_id)
+            # "always" has no equivalent in the hook protocol: allow once, and
+            # remember the rule on our side for the next identical request.
+            self.bridge.answer(request_id, "allow" if decision != "deny" else "deny")
+        else:
             self.claude.answer_permission(request_id, decision)
         self._show_next_approval()
+
+    # -- external sessions (hooks) ----------------------------------------
+
+    def _on_hook_event(self, event) -> None:
+        state, feeds = EVENT_STATES.get(event.name, ("idle", False))
+        self.sessions.record(
+            event.session_id,
+            event.project,
+            state,
+            describe(event) if feeds else "",
+        )
+        if event.name == "SessionEnd":
+            self.sessions.forget(event.session_id)
+
+    def _on_bridge_decision(self, request_id: int, event) -> None:
+        self.sessions.record(
+            event.session_id, event.project, "waiting", describe(event)
+        )
+        self._bridge_requests.add(request_id)
+        self._approval_queue.append(
+            (
+                request_id,
+                ToolRequest(
+                    tool=event.tool_name or "un outil",
+                    detail=_tool_detail(event.tool_input),
+                    project=event.project,
+                ),
+            )
+        )
+        self._show_next_approval()
+
+    # -- hook installation ------------------------------------------------
+
+    def _manage_hooks(self, installing: bool) -> None:
+        plan = (
+            hooks_installer.plan_install()
+            if installing
+            else hooks_installer.plan_uninstall()
+        )
+        if self._hook_dialog is None:
+            self._hook_dialog = HookDiffDialog()
+
+        if not self._hook_dialog.confirm(plan, installing):
+            return
+        if not plan.changed:
+            return
+
+        try:
+            saved = hooks_installer.apply(plan)
+        except OSError as exc:
+            self.tray.notify("Hooks", f"Écriture impossible : {exc}", warning=True)
+            return
+
+        installed = hooks_installer.is_installed()
+        self.tray.set_hooks_installed(installed)
+        self.tray.notify(
+            "Hooks installés" if installed else "Hooks retirés",
+            summarise_backup(saved),
+        )
+        if not installed:
+            self.sessions.clear()
 
     def _open_quick_note(self) -> None:
         if self._note_dialog is None:
@@ -413,3 +518,17 @@ class AvatarApp:
 def main(argv: list[str] | None = None) -> int:
     app = AvatarApp(list(argv if argv is not None else sys.argv))
     return app.run()
+
+
+def _tool_detail(tool_input: dict) -> str:
+    """What exactly a hooked session is about to do, for the approval card."""
+    for key in ("command", "file_path", "path", "url", "pattern"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            return value
+    try:
+        import json as _json
+
+        return _json.dumps(tool_input, ensure_ascii=False, indent=2)[:2000]
+    except (TypeError, ValueError):
+        return str(tool_input)[:2000]

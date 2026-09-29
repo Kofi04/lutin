@@ -10,3 +10,4 @@ dist/
 *.db-wal
 state.ini
 .ruff_cache/
+.gstack/

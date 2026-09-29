@@ -28,7 +28,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 from . import winapi
 from .branding import APP_NAME
 from .config import Appearance, config_dir
-from .features.monitor import Mood
+from .mood import Mood
 from .sprite import BASE_SIZE, SpriteState, draw_avatar
 
 # Frame pacing is adaptive. Nobody is studying the idle bob, and an avatar that

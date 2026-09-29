@@ -231,6 +231,10 @@ class ApprovalCard(QDialog):
         self.setWindowTitle("Autorisation")
         self.setStyleSheet(STYLESHEET)
         self.setMinimumWidth(520)
+        # This card holds a Claude Code session open while it waits. Behind the
+        # editor it is worse than useless: you would never see it, and the
+        # session would stall until the timeout denied it.
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
 
         self._title = QLabel("", self)
         self._detail = QTextBrowser(self)

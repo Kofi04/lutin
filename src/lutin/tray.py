@@ -16,8 +16,9 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from .branding import APP_NAME
 from .config import Config
-from .features.monitor import Mood, Sample
+from .features.monitor import Sample
 from .features.timers import Reminder, TimerManager
+from .mood import Mood
 from .sprite import SpriteState, draw_avatar
 
 _ICON_SIZE = 64  # rendered once per mood, then scaled down by Qt
@@ -57,6 +58,8 @@ class TrayIcon(QObject):
     capture_region_requested = Signal()
     ask_claude_requested = Signal()
     reset_claude_requested = Signal()
+    install_hooks_requested = Signal()
+    uninstall_hooks_requested = Signal()
     clipboard_requested = Signal()
     notes_requested = Signal()
     reminder_requested = Signal()
@@ -79,6 +82,7 @@ class TrayIcon(QObject):
         self._mood = Mood.CALM
         self._avatar_visible = True
         self._autostart = False
+        self._hooks_installed = False
         self._capture_clipboard = config.clipboard.enabled
 
         self._icon = QSystemTrayIcon(mood_icon(Mood.CALM), self)
@@ -106,6 +110,9 @@ class TrayIcon(QObject):
 
     def set_autostart(self, enabled: bool) -> None:
         self._autostart = enabled
+
+    def set_hooks_installed(self, installed: bool) -> None:
+        self._hooks_installed = installed
 
     def set_clipboard_capture(self, enabled: bool) -> None:
         self._capture_clipboard = enabled
@@ -213,6 +220,14 @@ class TrayIcon(QObject):
         autostart.toggled.connect(self.autostart_toggled.emit)
 
         menu.addSeparator()
+        if self._hooks_installed:
+            menu.addAction("Désinstaller les hooks Claude Code").triggered.connect(
+                self.uninstall_hooks_requested.emit
+            )
+        else:
+            menu.addAction("Installer les hooks Claude Code…").triggered.connect(
+                self.install_hooks_requested.emit
+            )
         menu.addAction("Nouvelle discussion Claude").triggered.connect(
             self.reset_claude_requested.emit
         )

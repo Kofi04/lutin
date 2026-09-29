@@ -8,19 +8,12 @@ QApplication.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from .. import winapi
 from ..config import MonitorSettings
-
-
-class Mood(Enum):
-    CALM = "calm"
-    BUSY = "busy"
-    STRESSED = "stressed"
-    TIRED = "tired"
+from ..mood import Mood
 
 
 @dataclass(frozen=True)

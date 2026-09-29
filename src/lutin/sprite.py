@@ -14,17 +14,24 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPen
 
-from .features.monitor import Mood
+from .mood import Mood
 
 # Base design size. Everything below is expressed as a fraction of this, so the
 # avatar scales cleanly.
 BASE_SIZE = 96
 
 _PALETTE = {
+    # From the machine.
     Mood.CALM: ("#5EDCCF", "#2FA89B"),
     Mood.BUSY: ("#FFD166", "#E9A400"),
     Mood.STRESSED: ("#FF8787", "#DC3A3A"),
     Mood.TIRED: ("#B3A4EA", "#6C4BC4"),
+    # From Claude. WAITING is amber on purpose: it is the one state that needs
+    # you to look, so it must not blend into the calm teal.
+    Mood.WORKING: ("#7FC4FF", "#2F80D8"),
+    Mood.WAITING: ("#FFC163", "#E08700"),
+    Mood.DONE: ("#7BE8B3", "#2FA86B"),
+    Mood.ERROR: ("#FF9B9B", "#C42B2B"),
 }
 
 _INK = QColor("#1B2430")
@@ -171,15 +178,28 @@ def _draw_mouth(painter: QPainter, body: QRectF, state: SpriteState) -> None:
     painter.setBrush(Qt.BrushStyle.NoBrush)
 
     path = QPainterPath()
-    if state.mood is Mood.CALM:
-        # Gentle smile.
+    if state.mood in (Mood.CALM, Mood.DONE):
+        # Gentle smile. DONE grins a little wider.
+        curve = width * (0.72 if state.mood is Mood.DONE else 0.55)
         path.moveTo(left, mouth_y)
-        path.quadTo(body.center().x(), mouth_y + width * 0.55, left + width, mouth_y)
-    elif state.mood is Mood.BUSY:
+        path.quadTo(body.center().x(), mouth_y + curve, left + width, mouth_y)
+    elif state.mood in (Mood.BUSY, Mood.WORKING):
         # Focused straight line.
         path.moveTo(left, mouth_y + 2)
         path.lineTo(left + width, mouth_y + 2)
-    elif state.mood is Mood.STRESSED:
+    elif state.mood is Mood.WAITING:
+        # A small "o": it is about to ask you something.
+        painter.setBrush(_INK)
+        painter.drawEllipse(
+            QRectF(
+                body.center().x() - width * 0.16,
+                mouth_y - 1,
+                width * 0.32,
+                width * 0.32,
+            )
+        )
+        return
+    elif state.mood in (Mood.STRESSED, Mood.ERROR):
         # Open, worried mouth.
         painter.setBrush(_INK)
         painter.drawEllipse(
@@ -201,6 +221,35 @@ def _draw_mouth(painter: QPainter, body: QRectF, state: SpriteState) -> None:
 
 def _draw_mood_accent(painter: QPainter, body: QRectF, state: SpriteState) -> None:
     """A small badge that makes the mood readable at a glance."""
+    if state.mood is Mood.WAITING:
+        # A pulsing "!" - the one badge that is asking you for something, so it
+        # must be the loudest thing the avatar ever does.
+        pulse = 0.72 + 0.28 * abs(math.sin(state.time * 3.4))
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSizeF(13 * pulse)
+        painter.setFont(font)
+        painter.setPen(QColor("#1B2430"))
+        painter.setBrush(QColor("#FFFFFF"))
+        badge = QRectF(body.right() - 15, body.top() - 5, 17, 17)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(badge)
+        painter.setPen(QColor("#B26A00"))
+        painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, "!")
+        return
+
+    if state.mood is Mood.ERROR:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#C42B2B"))
+        painter.drawEllipse(QRectF(body.right() - 13, body.top() - 3, 12, 12))
+        return
+
+    if state.mood is Mood.DONE:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#2FA86B"))
+        painter.drawEllipse(QRectF(body.right() - 13, body.top() - 3, 12, 12))
+        return
+
     if state.mood is Mood.STRESSED:
         # Sweat drop on the upper right.
         drop = QPainterPath()
@@ -240,7 +289,7 @@ def _draw_mood_accent(painter: QPainter, body: QRectF, state: SpriteState) -> No
                 "z",
             )
 
-    elif state.mood is Mood.BUSY:
+    elif state.mood in (Mood.BUSY, Mood.WORKING):
         # A spinner arc, because "busy" reads best as motion.
         rect = QRectF(body.right() - 16, body.top() - 4, 14, 14)
         pen = QPen(QColor(255, 255, 255, 230), 2.6)
