@@ -17,6 +17,7 @@ does not expose.
 from __future__ import annotations
 
 import math
+import os
 import random
 import re
 
@@ -46,6 +47,16 @@ class AvatarWindow(QWidget):
     context_menu_requested = Signal(QPoint)
     moved_by_user = Signal()
 
+    #: Ctrl+drag: the controller looks up the window under the cursor and shows
+    #: the halo. The avatar itself knows nothing about windows or captures.
+    targeting_started = Signal()
+    targeting_moved = Signal()
+    targeting_finished = Signal()
+    targeting_cancelled = Signal()
+
+    #: Local file paths dropped onto the avatar.
+    files_dropped = Signal(list)
+
     def __init__(self, appearance: Appearance) -> None:
         super().__init__(
             None,
@@ -72,6 +83,8 @@ class AvatarWindow(QWidget):
 
         self._drag_origin: QPoint | None = None
         self._dragged = False
+        self._targeting = False
+        self.setAcceptDrops(True)
 
         self._timer = QTimer(self)
         self._timer.setInterval(_FRAME_MS_IDLE)
@@ -168,18 +181,35 @@ class AvatarWindow(QWidget):
         super().leaveEvent(event)
 
     def mousePressEvent(self, event) -> None:
-        if event.button() is Qt.MouseButton.LeftButton:
-            self._drag_origin = event.globalPosition().toPoint() - self.pos()
-            self._dragged = False
-            self._state.pressed = True
-            self.update()
-            event.accept()
-        else:
+        if event.button() is not Qt.MouseButton.LeftButton:
             super().mousePressEvent(event)
+            return
+
+        # Ctrl+drag points at a window instead of moving the avatar. Plain drag
+        # has always moved it, and people rely on that; a modifier is the only
+        # way to fit coucou's "drop me on a window" gesture onto a movable
+        # character without making one of the two behaviours unreachable.
+        self._targeting = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        self._drag_origin = event.globalPosition().toPoint() - self.pos()
+        self._dragged = False
+        self._state.pressed = True
+        self.update()
+
+        if self._targeting:
+            self.targeting_started.emit()
+        event.accept()
 
     def mouseMoveEvent(self, event) -> None:
         if self._drag_origin is None:
             return
+
+        if self._targeting:
+            # The avatar stays put while targeting; the halo under the cursor is
+            # the feedback, so there is nothing to move here.
+            self._dragged = True
+            self.targeting_moved.emit()
+            return
+
         target = event.globalPosition().toPoint() - self._drag_origin
         if not self._dragged:
             moved = (target - self.pos()).manhattanLength()
@@ -195,15 +225,58 @@ class AvatarWindow(QWidget):
 
         self._state.pressed = False
         self._drag_origin = None
+        was_targeting, self._targeting = self._targeting, False
         self.update()
 
-        if self._dragged:
+        if was_targeting:
+            # A Ctrl+click without movement is a mis-click, not a pick.
+            if self._dragged:
+                self.targeting_finished.emit()
+            else:
+                self.targeting_cancelled.emit()
+        elif self._dragged:
             self._settings.setValue("avatar/position", self.pos())
             self._settings.sync()
             self.moved_by_user.emit()
         else:
             self.clicked.emit()
         event.accept()
+
+    # -- dropped files ----------------------------------------------------
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls() and self._local_paths(event.mimeData()):
+            self._state.catching = True
+            self.update()
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event) -> None:
+        self._state.catching = False
+        self.update()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        paths = self._local_paths(event.mimeData())
+        self._state.catching = False
+        self.update()
+        if paths:
+            event.acceptProposedAction()
+            self.files_dropped.emit(paths)
+
+    @staticmethod
+    def _local_paths(mime) -> list[str]:
+        """Local file paths from a drop, ignoring remote URLs and directories."""
+        paths = []
+        for url in mime.urls():
+            if url.isLocalFile():
+                path = url.toLocalFile()
+                if path and os.path.isfile(path):
+                    paths.append(path)
+        return paths
 
     def contextMenuEvent(self, event) -> None:
         self.context_menu_requested.emit(event.globalPos())

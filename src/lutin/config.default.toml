@@ -20,6 +20,10 @@ quick_note = "ctrl+alt+N"
 clipboard = "ctrl+alt+V"
 launcher = "ctrl+alt+Space"
 toggle_avatar = "ctrl+alt+A"
+capture_region = "ctrl+alt+S"   # sélectionner une zone de l'écran à montrer
+
+# Pour montrer une fenêtre entière : Ctrl + glisser le lutin dessus.
+# Pour montrer une image : la déposer sur le lutin.
 
 [monitor]
 enabled = true

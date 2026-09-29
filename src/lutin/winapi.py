@@ -1,8 +1,8 @@
 """Thin ctypes wrappers over the Win32 APIs the avatar needs.
 
 Everything here is stdlib-only on purpose: the handful of calls we make
-(taskbar state, system counters, global hotkeys, autostart) are cheap to
-express with ctypes and not worth an extra dependency.
+(taskbar state, system counters, global hotkeys, autostart, window lookup) are
+cheap to express with ctypes and not worth an extra dependency.
 
 Importing this module on a non-Windows platform is safe; the functions degrade
 to neutral values so the rest of the app and the tests stay portable.
@@ -297,6 +297,119 @@ def register_hotkey(hwnd: int, hotkey_id: int, modifiers: int, vk: int) -> bool:
 def unregister_hotkey(hwnd: int, hotkey_id: int) -> None:
     if IS_WINDOWS:
         _user32.UnregisterHotKey(wintypes.HWND(hwnd), hotkey_id)
+
+
+# ---------------------------------------------------------------------------
+# Window lookup (for "drop the avatar on a window")
+# ---------------------------------------------------------------------------
+
+_GA_ROOT = 2
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+@dataclass(frozen=True)
+class WindowInfo:
+    """A top-level window, in physical pixels (what Win32 reports)."""
+
+    hwnd: int
+    title: str
+    process: str  # executable name, e.g. "chrome.exe"
+    left: int
+    top: int
+    right: int
+    bottom: int
+
+    @property
+    def width(self) -> int:
+        return self.right - self.left
+
+    @property
+    def height(self) -> int:
+        return self.bottom - self.top
+
+    def label(self) -> str:
+        """Short human label for the context pill, e.g. "Chrome - Gmail"."""
+        app = self.process.removesuffix(".exe").replace("_", " ").title()
+        title = self.title.strip()
+        if not title:
+            return app
+        if len(title) > 60:
+            title = title[:59] + "…"
+        return f"{app} — {title}"
+
+
+def _window_title(hwnd: int) -> str:
+    length = _user32.GetWindowTextLengthW(wintypes.HWND(hwnd))
+    if length <= 0:
+        return ""
+    buffer = ctypes.create_unicode_buffer(length + 1)
+    _user32.GetWindowTextW(wintypes.HWND(hwnd), buffer, length + 1)
+    return buffer.value
+
+
+def _window_process_name(hwnd: int) -> str:
+    pid = wintypes.DWORD()
+    _user32.GetWindowThreadProcessId(wintypes.HWND(hwnd), ctypes.byref(pid))
+    if not pid.value:
+        return ""
+
+    # LIMITED_INFORMATION is enough for the image name and, unlike
+    # PROCESS_QUERY_INFORMATION, does not need elevation for most processes.
+    handle = _kernel32.OpenProcess(
+        _PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value
+    )
+    if not handle:
+        return ""
+    try:
+        size = wintypes.DWORD(260)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        if not _kernel32.QueryFullProcessImageNameW(
+            handle, 0, buffer, ctypes.byref(size)
+        ):
+            return ""
+        return os.path.basename(buffer.value)
+    finally:
+        _kernel32.CloseHandle(handle)
+
+
+def window_at(x: int, y: int, ignore: set[int] | None = None):
+    """The top-level window at a physical screen point, or None.
+
+    `ignore` holds our own window handles: the avatar is always-on-top, so
+    without this the lookup would always find the avatar itself.
+    """
+    if not IS_WINDOWS:
+        return None
+
+    hwnd = _user32.WindowFromPoint(wintypes.POINT(x, y))
+    if not hwnd:
+        return None
+
+    # WindowFromPoint returns the deepest child (a button, a text area); walk up
+    # to the top-level window the user actually means.
+    root = _user32.GetAncestor(wintypes.HWND(hwnd), _GA_ROOT)
+    hwnd = int(root) if root else int(hwnd)
+
+    if ignore and hwnd in ignore:
+        return None
+    if not _user32.IsWindowVisible(wintypes.HWND(hwnd)):
+        return None
+
+    rect = wintypes.RECT()
+    if not _user32.GetWindowRect(wintypes.HWND(hwnd), ctypes.byref(rect)):
+        return None
+    if rect.right <= rect.left or rect.bottom <= rect.top:
+        return None
+
+    return WindowInfo(
+        hwnd=hwnd,
+        title=_window_title(hwnd),
+        process=_window_process_name(hwnd),
+        left=rect.left,
+        top=rect.top,
+        right=rect.right,
+        bottom=rect.bottom,
+    )
 
 
 def set_app_user_model_id(app_id: str) -> None:

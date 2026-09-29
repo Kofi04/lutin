@@ -51,6 +51,9 @@ command line, `.venv\Scripts\pythonw.exe -m lutin` does the same thing.
 
 | Action | Hotkey | Menu entry |
 |---|---|---|
+| Show a screen region | `Ctrl+Alt+S` | *Montrer une zone…* |
+| Show a window | `Ctrl`+drag the avatar onto it | — |
+| Show an image | drop the file on the avatar | — |
 | Quick note | `Ctrl+Alt+N` | *Note rapide* |
 | Clipboard history | `Ctrl+Alt+V` | *Presse-papiers* (or a single tray click) |
 | Launcher menu | `Ctrl+Alt+Space` | *Lancer* |
@@ -66,6 +69,13 @@ command line, `.venv\Scripts\pythonw.exe -m lutin` does the same thing.
   tired face when you are below `battery_low` on battery power.
 - **Reminders** accept `25`, `25m`, `1h30`, `90s` or `25:00`, with presets
   including a 25-minute pomodoro.
+- **Captures** are downscaled to a 1568px long edge (past that Claude
+  downsamples anyway) and always shown in a confirmation dialog before they can
+  be used. Plain drag still moves the avatar; `Ctrl`+drag is what points at a
+  window, so neither gesture shadows the other.
+
+> **Captures are not wired to Claude yet.** Milestone 1 produces and confirms
+> the image; sending it to a Claude Code session is milestone 2.
 
 ## Configuration
 

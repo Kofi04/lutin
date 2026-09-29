@@ -54,6 +54,7 @@ class TrayIcon(QObject):
     """Owns the QSystemTrayIcon and rebuilds its menu on demand."""
 
     quick_note_requested = Signal()
+    capture_region_requested = Signal()
     clipboard_requested = Signal()
     notes_requested = Signal()
     reminder_requested = Signal()
@@ -157,6 +158,12 @@ class TrayIcon(QObject):
         menu.addSeparator()
 
         hotkeys = self._config.hotkeys
+        self._add(
+            menu,
+            "Montrer une zone…",
+            self.capture_region_requested,
+            hotkeys.capture_region,
+        )
         self._add(menu, "Note rapide", self.quick_note_requested, hotkeys.quick_note)
         self._add(
             menu, "Presse-papiers", self.clipboard_requested, hotkeys.clipboard

@@ -48,6 +48,9 @@ class SpriteState:
     # handful of pixels and the default proportions blur into the body, so the
     # icon renderer exaggerates them the way icon designers hint small sizes.
     feature_scale: float = 1.0
+    # A file is hovering over the avatar: it squares up into a box, ready to
+    # swallow whatever is dropped.
+    catching: bool = False
 
 
 def draw_avatar(painter: QPainter, size: float, state: SpriteState) -> None:
@@ -71,9 +74,10 @@ def draw_avatar(painter: QPainter, size: float, state: SpriteState) -> None:
     painter.translate(-BASE_SIZE / 2, -BASE_SIZE / 2)
 
     body = QRectF(12, 14, BASE_SIZE - 24, BASE_SIZE - 32)
-    _draw_body(painter, body, light, dark, state.hovered)
+    _draw_body(painter, body, light, dark, state.hovered, state.catching)
     _draw_face(painter, body, state)
-    _draw_mood_accent(painter, body, state)
+    if not state.catching:
+        _draw_mood_accent(painter, body, state)
 
     painter.restore()
     painter.restore()
@@ -90,7 +94,12 @@ def _draw_shadow(painter: QPainter, bob: float) -> None:
 
 
 def _draw_body(
-    painter: QPainter, body: QRectF, light: str, dark: str, hovered: bool
+    painter: QPainter,
+    body: QRectF,
+    light: str,
+    dark: str,
+    hovered: bool,
+    catching: bool = False,
 ) -> None:
     gradient = QLinearGradient(body.topLeft(), body.bottomRight())
     gradient.setColorAt(0.0, QColor(light))
@@ -98,7 +107,9 @@ def _draw_body(
 
     path = QPainterPath()
     # A generous corner radius on a near-square gives a blob, not a rectangle.
-    path.addRoundedRect(body, body.width() * 0.46, body.height() * 0.44)
+    # Squaring it off is what reads as "box, ready to catch something".
+    radius = 0.12 if catching else 0.46
+    path.addRoundedRect(body, body.width() * radius, body.height() * radius * 0.96)
 
     painter.setBrush(QBrush(gradient))
     painter.setPen(QPen(QColor(dark).darker(125), 2.0) if hovered else Qt.PenStyle.NoPen)

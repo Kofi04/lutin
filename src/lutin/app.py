@@ -25,6 +25,7 @@ from .branding import (
     INSTANCE_KEY,
     ORG_NAME,
 )
+from .capture.controller import CaptureController
 from .config import (
     Config,
     config_dir,
@@ -40,6 +41,7 @@ from .hotkeys import GlobalHotkeys
 from .storage import Storage
 from .tray import TrayIcon, app_icon
 from .ui import HistoryPanel, QuickNoteDialog, ReminderDialog
+from .ui_capture import CapturePreview
 
 
 class AvatarApp:
@@ -74,6 +76,12 @@ class AvatarApp:
 
         self.avatar = AvatarWindow(self.config.appearance)
         self.tray = TrayIcon(self.config, self.timers)
+
+        self.capture = CaptureController()
+        # The avatar is always-on-top, so without this the window lookup would
+        # only ever find the avatar itself.
+        self.capture.ignore_window(self.avatar)
+        self._capture_preview: CapturePreview | None = None
 
         self._note_dialog: QuickNoteDialog | None = None
         self._history: HistoryPanel | None = None
@@ -133,6 +141,17 @@ class AvatarApp:
 
         self.avatar.clicked.connect(self._show_action_menu_at_avatar)
         self.avatar.context_menu_requested.connect(self.tray.popup_menu)
+        self.avatar.targeting_started.connect(self.capture.start_targeting)
+        self.avatar.targeting_moved.connect(self.capture.update_target)
+        self.avatar.targeting_finished.connect(self.capture.finish_targeting)
+        self.avatar.targeting_cancelled.connect(self.capture.cancel_targeting)
+        self.avatar.files_dropped.connect(self._on_files_dropped)
+
+        self.capture.captured.connect(self._preview_capture)
+        self.capture.failed.connect(
+            lambda message: self.tray.notify("Capture", message, warning=True)
+        )
+        self.tray.capture_region_requested.connect(self.capture.start_region)
 
         self.tray.quick_note_requested.connect(self._open_quick_note)
         self.tray.clipboard_requested.connect(
@@ -161,6 +180,7 @@ class AvatarApp:
         )
         self.hotkeys.register(hotkeys.launcher, self._show_launcher_menu)
         self.hotkeys.register(hotkeys.toggle_avatar, self._toggle_avatar)
+        self.hotkeys.register(hotkeys.capture_region, self.capture.start_region)
 
     # -- actions ----------------------------------------------------------
 
@@ -171,6 +191,28 @@ class AvatarApp:
     def _on_timer_fired(self, reminder: Reminder) -> None:
         self.tray.notify("C'est l'heure", reminder.label)
         self.qt.beep()
+
+    def _on_files_dropped(self, paths: list) -> None:
+        # One capture at a time: the preview is a single dialog, and asking
+        # about five files at once has no sensible meaning yet.
+        if paths:
+            self.capture.capture_file(paths[0])
+        if len(paths) > 1:
+            self.tray.notify(
+                "Capture",
+                f"{len(paths)} fichiers déposés, je ne garde que le premier.",
+            )
+
+    def _preview_capture(self, capture) -> None:
+        if self._capture_preview is None:
+            self._capture_preview = CapturePreview()
+            self._capture_preview.confirmed.connect(self._on_capture_confirmed)
+        self._capture_preview.show_capture(capture)
+
+    def _on_capture_confirmed(self, capture) -> None:
+        # M2 will hand this to Claude. Until then, confirm what was captured so
+        # the gesture is verifiable end to end.
+        self.tray.notify("Capture prête", capture.summary())
 
     def _open_quick_note(self) -> None:
         if self._note_dialog is None:

@@ -52,6 +52,7 @@ class Hotkeys:
     clipboard: str = "ctrl+alt+V"
     toggle_avatar: str = "ctrl+alt+A"
     launcher: str = "ctrl+alt+Space"
+    capture_region: str = "ctrl+alt+S"
 
 
 @dataclass
