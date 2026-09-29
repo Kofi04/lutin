@@ -55,6 +55,8 @@ class TrayIcon(QObject):
 
     quick_note_requested = Signal()
     capture_region_requested = Signal()
+    ask_claude_requested = Signal()
+    reset_claude_requested = Signal()
     clipboard_requested = Signal()
     notes_requested = Signal()
     reminder_requested = Signal()
@@ -159,6 +161,10 @@ class TrayIcon(QObject):
 
         hotkeys = self._config.hotkeys
         self._add(
+            menu, "Demander à Claude…", self.ask_claude_requested,
+            hotkeys.ask_claude,
+        )
+        self._add(
             menu,
             "Montrer une zone…",
             self.capture_region_requested,
@@ -207,6 +213,9 @@ class TrayIcon(QObject):
         autostart.toggled.connect(self.autostart_toggled.emit)
 
         menu.addSeparator()
+        menu.addAction("Nouvelle discussion Claude").triggered.connect(
+            self.reset_claude_requested.emit
+        )
         menu.addAction("Recharger la configuration").triggered.connect(
             self.reload_config_requested.emit
         )

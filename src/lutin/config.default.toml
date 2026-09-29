@@ -21,6 +21,7 @@ clipboard = "ctrl+alt+V"
 launcher = "ctrl+alt+Space"
 toggle_avatar = "ctrl+alt+A"
 capture_region = "ctrl+alt+S"   # sélectionner une zone de l'écran à montrer
+ask_claude = "ctrl+alt+C"       # ouvrir la discussion avec Claude
 
 # Pour montrer une fenêtre entière : Ctrl + glisser le lutin dessus.
 # Pour montrer une image : la déposer sur le lutin.
@@ -32,6 +33,19 @@ cpu_busy = 65.0        # au-dessus, le lutin a l'air occupé
 cpu_stressed = 88.0    # au-dessus, il a l'air stressé
 ram_stressed = 88.0
 battery_low = 20       # en dessous, sur batterie, il a l'air fatigué
+
+[claude]
+enabled = true
+# Au-delà de ce délai sans réponse de votre part, l'action est REFUSÉE.
+# Le silence ne vaut pas accord.
+permission_timeout_seconds = 110
+# Claude peut modifier des fichiers et lancer des commandes, chaque action
+# étant validée par vous dans le lutin. Mettez false pour qu'il se contente
+# de répondre.
+allow_actions = true
+# Read / Glob / Grep / WebFetch / WebSearch passent sans demander. Ces outils
+# ne modifient rien, mais ils laissent Claude lire tous vos fichiers lisibles.
+auto_approve_read_only = true
 
 [clipboard]
 enabled = true

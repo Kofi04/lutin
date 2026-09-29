@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections import deque
 
 from PySide6.QtCore import QSharedMemory, Qt
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
@@ -26,6 +27,7 @@ from .branding import (
     ORG_NAME,
 )
 from .capture.controller import CaptureController
+from .claude import ClaudeSession, check_auth
 from .config import (
     Config,
     config_dir,
@@ -42,6 +44,7 @@ from .storage import Storage
 from .tray import TrayIcon, app_icon
 from .ui import HistoryPanel, QuickNoteDialog, ReminderDialog
 from .ui_capture import CapturePreview
+from .ui_claude import ApprovalCard, AskPanel
 
 
 class AvatarApp:
@@ -82,6 +85,17 @@ class AvatarApp:
         # only ever find the avatar itself.
         self.capture.ignore_window(self.avatar)
         self._capture_preview: CapturePreview | None = None
+
+        self.claude = ClaudeSession(
+            permission_timeout=self.config.claude.permission_timeout_seconds,
+            allow_actions=self.config.claude.allow_actions,
+            auto_approve_read_only=self.config.claude.auto_approve_read_only,
+        )
+        self._ask_panel: AskPanel | None = None
+        self._approval: ApprovalCard | None = None
+        self._approval_queue: deque = deque()
+        self._approval_current: int | None = None
+        self._auth_checked = False
 
         self._note_dialog: QuickNoteDialog | None = None
         self._history: HistoryPanel | None = None
@@ -125,6 +139,7 @@ class AvatarApp:
         return self.qt.exec()
 
     def shutdown(self) -> None:
+        self.claude.shutdown()
         self.hotkeys.unregister_all()
         self.monitor.stop()
         self.tray.hide()
@@ -152,6 +167,15 @@ class AvatarApp:
             lambda message: self.tray.notify("Capture", message, warning=True)
         )
         self.tray.capture_region_requested.connect(self.capture.start_region)
+        self.tray.ask_claude_requested.connect(lambda: self._open_ask(None))
+        self.tray.reset_claude_requested.connect(self._reset_claude)
+
+        self.claude.chunk.connect(self._on_claude_chunk)
+        self.claude.activity.connect(self._on_claude_activity)
+        self.claude.finished.connect(self._on_claude_finished)
+        self.claude.failed.connect(self._on_claude_failed)
+        self.claude.reset_answer.connect(self._on_claude_reset)
+        self.claude.permission_requested.connect(self._on_permission_requested)
 
         self.tray.quick_note_requested.connect(self._open_quick_note)
         self.tray.clipboard_requested.connect(
@@ -181,6 +205,7 @@ class AvatarApp:
         self.hotkeys.register(hotkeys.launcher, self._show_launcher_menu)
         self.hotkeys.register(hotkeys.toggle_avatar, self._toggle_avatar)
         self.hotkeys.register(hotkeys.capture_region, self.capture.start_region)
+        self.hotkeys.register(hotkeys.ask_claude, lambda: self._open_ask(None))
 
     # -- actions ----------------------------------------------------------
 
@@ -210,9 +235,89 @@ class AvatarApp:
         self._capture_preview.show_capture(capture)
 
     def _on_capture_confirmed(self, capture) -> None:
-        # M2 will hand this to Claude. Until then, confirm what was captured so
-        # the gesture is verifiable end to end.
-        self.tray.notify("Capture prête", capture.summary())
+        self._open_ask(capture)
+
+    # -- Claude -----------------------------------------------------------
+
+    def _open_ask(self, capture) -> None:
+        if not self.config.claude.enabled:
+            self.tray.notify("Claude", "Désactivé dans la configuration.", warning=True)
+            return
+        if not self._check_auth_once():
+            return
+
+        if self._ask_panel is None:
+            self._ask_panel = AskPanel()
+            self._ask_panel.asked.connect(self._on_asked)
+            self._ask_panel.interrupted.connect(self.claude.cancel)
+        self._ask_panel.open_with(capture)
+
+    def _reset_claude(self) -> None:
+        """Forget the conversation and every 'always allow' rule with it."""
+        self.claude.reset()
+        if self._ask_panel is not None:
+            self._ask_panel.reset_answer()
+            self._ask_panel.set_capture(None)
+        self.tray.notify("Claude", "Nouvelle discussion. Règles oubliées.")
+
+    def _check_auth_once(self) -> bool:
+        """Tell the user to log in *before* the SDK fails cryptically."""
+        if self._auth_checked:
+            return True
+        status = check_auth()
+        if not status.logged_in:
+            self.tray.notify("Claude Code", status.message(), warning=True)
+            return False
+        self._auth_checked = True
+        return True
+
+    def _on_asked(self, question: str, capture) -> None:
+        self.claude.ask(question, capture)
+
+    def _on_claude_chunk(self, text: str) -> None:
+        if self._ask_panel is not None:
+            self._ask_panel.append_answer(text)
+
+    def _on_claude_activity(self, line: str) -> None:
+        if self._ask_panel is not None:
+            self._ask_panel.set_status(line)
+
+    def _on_claude_finished(self, status: str) -> None:
+        if self._ask_panel is not None:
+            self._ask_panel.finish(status)
+
+    def _on_claude_reset(self) -> None:
+        if self._ask_panel is not None:
+            self._ask_panel.reset_answer()
+
+    def _on_claude_failed(self, message: str) -> None:
+        if self._ask_panel is not None:
+            self._ask_panel.show_error(message)
+        self.tray.notify("Claude", message, warning=True)
+
+    # -- approvals --------------------------------------------------------
+
+    def _on_permission_requested(self, request_id: int, request) -> None:
+        self._approval_queue.append((request_id, request))
+        self._show_next_approval()
+
+    def _show_next_approval(self) -> None:
+        if self._approval_current is not None or not self._approval_queue:
+            return
+
+        if self._approval is None:
+            self._approval = ApprovalCard()
+            self._approval.decided.connect(self._on_approval_decided)
+
+        request_id, request = self._approval_queue.popleft()
+        self._approval_current = request_id
+        self._approval.ask(request, self.config.claude.permission_timeout_seconds)
+
+    def _on_approval_decided(self, decision: str) -> None:
+        request_id, self._approval_current = self._approval_current, None
+        if request_id is not None:
+            self.claude.answer_permission(request_id, decision)
+        self._show_next_approval()
 
     def _open_quick_note(self) -> None:
         if self._note_dialog is None:

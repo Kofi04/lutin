@@ -53,6 +53,7 @@ class Hotkeys:
     toggle_avatar: str = "ctrl+alt+A"
     launcher: str = "ctrl+alt+Space"
     capture_region: str = "ctrl+alt+S"
+    ask_claude: str = "ctrl+alt+C"
 
 
 @dataclass
@@ -63,6 +64,18 @@ class MonitorSettings:
     cpu_stressed: float = 88.0
     ram_stressed: float = 88.0
     battery_low: int = 20
+
+
+@dataclass
+class ClaudeSettings:
+    enabled: bool = True
+    # Below this, an unanswered request is denied. Silence is not consent.
+    permission_timeout_seconds: int = 110
+    # Claude may edit files and run commands, each one approved in Lutin.
+    allow_actions: bool = True
+    # Read / Glob / Grep / WebFetch / WebSearch run without asking. They have no
+    # side effects, but they do let Claude read any file you can read.
+    auto_approve_read_only: bool = True
 
 
 @dataclass
@@ -86,6 +99,7 @@ class Config:
     hotkeys: Hotkeys = field(default_factory=Hotkeys)
     monitor: MonitorSettings = field(default_factory=MonitorSettings)
     clipboard: ClipboardSettings = field(default_factory=ClipboardSettings)
+    claude: ClaudeSettings = field(default_factory=ClaudeSettings)
     launcher: list[LauncherEntry] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -203,6 +217,7 @@ def load_config(path: Path | None = None) -> Config:
     _load_section(raw, "hotkeys", config.hotkeys, config.warnings)
     _load_section(raw, "monitor", config.monitor, config.warnings)
     _load_section(raw, "clipboard", config.clipboard, config.warnings)
+    _load_section(raw, "claude", config.claude, config.warnings)
     config.launcher = _load_launcher(raw, config.warnings)
 
     # Clamp the values where an out-of-range number would break the UI.
@@ -212,5 +227,8 @@ def load_config(path: Path | None = None) -> Config:
         max(config.monitor.interval_seconds, 0.5), 60.0
     )
     config.clipboard.max_entries = min(max(config.clipboard.max_entries, 10), 5000)
+    config.claude.permission_timeout_seconds = min(
+        max(config.claude.permission_timeout_seconds, 5), 600
+    )
 
     return config
