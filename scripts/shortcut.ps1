@@ -42,6 +42,21 @@ if (-not $DesktopOnly) {
     $targets += Join-Path ([Environment]::GetFolderPath('Programs')) $shortcutName
 }
 
+# Shortcuts left over from when the app was called Lutin. They point at
+# .venv\Scripts\lutin.exe, which no longer exists, so they are dead icons the
+# user would keep clicking. Removed on both create and remove.
+$legacyName = 'Lutin.lnk'
+$legacyTargets = @(
+    Join-Path ([Environment]::GetFolderPath('Desktop')) $legacyName
+    Join-Path ([Environment]::GetFolderPath('Programs')) $legacyName
+)
+foreach ($path in $legacyTargets) {
+    if (Test-Path $path) {
+        Remove-Item $path -Force
+        Write-Host "removed  $path (ancien nom)"
+    }
+}
+
 if ($Remove) {
     foreach ($path in $targets) {
         if (Test-Path $path) {
