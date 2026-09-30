@@ -1,6 +1,6 @@
-<#
+﻿<#
 .SYNOPSIS
-    Creates (or removes) the Lutin shortcuts.
+    Creates (or removes) the Little Wizard shortcuts.
 
 .DESCRIPTION
     Puts a clickable icon on the Desktop and in the Start Menu, pointing at the
@@ -33,10 +33,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$launcher = Join-Path $projectRoot '.venv\Scripts\lutin.exe'
-$icon = Join-Path $projectRoot 'src\lutin\app.ico'
+$launcher = Join-Path $projectRoot '.venv\Scripts\wizard.exe'
+$icon = Join-Path $projectRoot 'src\wizard\app.ico'
 
-$shortcutName = 'Lutin.lnk'
+$shortcutName = 'LittleWizard.lnk'
 $targets = @(Join-Path ([Environment]::GetFolderPath('Desktop')) $shortcutName)
 if (-not $DesktopOnly) {
     $targets += Join-Path ([Environment]::GetFolderPath('Programs')) $shortcutName
@@ -92,5 +92,5 @@ foreach ($path in $targets) {
 [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
 
 Write-Host ''
-Write-Host 'Double-click "Lutin" on the Desktop, or search for it in the Start Menu.'
+Write-Host 'Double-click "Little Wizard" on the Desktop, or search for it in the Start Menu.'
 Write-Host 'To pin it to the taskbar: right-click the Start Menu entry -> More -> Pin to taskbar.'

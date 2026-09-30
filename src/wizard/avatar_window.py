@@ -27,8 +27,9 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from . import winapi
 from .branding import APP_NAME
-from .config import Appearance, config_dir
+from .config import Appearance
 from .mood import Mood
+from .paths import state_path
 from .sprite import BASE_SIZE, SpriteState, draw_avatar
 
 # Frame pacing is adaptive. Nobody is studying the idle bob, and an avatar that
@@ -74,7 +75,7 @@ class AvatarWindow(QWidget):
         self._appearance = appearance
         self._state = SpriteState()
         self._settings = QSettings(
-            str(config_dir() / "state.ini"), QSettings.Format.IniFormat
+            str(state_path()), QSettings.Format.IniFormat
         )
 
         self._elapsed = 0.0

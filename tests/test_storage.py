@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from lutin.storage import Storage
+from wizard.storage import Storage
 
 
 @pytest.fixture

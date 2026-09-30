@@ -443,7 +443,7 @@ def _launch_command() -> str:
     windowed = os.path.join(os.path.dirname(exe), "pythonw.exe")
     if os.path.exists(windowed):
         exe = windowed
-    return f'"{exe}" -m lutin'
+    return f'"{exe}" -m wizard'
 
 
 def autostart_enabled() -> bool:
@@ -471,3 +471,32 @@ def set_autostart(enabled: bool) -> None:
         else:
             with contextlib.suppress(FileNotFoundError):
                 winreg.DeleteValue(key, _RUN_VALUE)
+
+
+def migrate_autostart_value(legacy_name: str) -> bool:
+    """Move a Run entry written under the app's old name onto the current one.
+
+    Returns True when it did something. Without this, renaming the app would
+    leave a Run entry pointing at `-m lutin`, which no longer imports: Windows
+    would try to start the app at every logon and fail silently forever, while
+    the tray checkbox showed "start with Windows" as off.
+    """
+    if not IS_WINDOWS or legacy_name == _RUN_VALUE:
+        return False
+    import winreg
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_READ | winreg.KEY_WRITE
+        ) as key:
+            try:
+                winreg.QueryValueEx(key, legacy_name)
+            except FileNotFoundError:
+                return False
+            # Re-derive the command rather than reusing the stored one: the old
+            # value points at the old module name.
+            winreg.SetValueEx(key, _RUN_VALUE, 0, winreg.REG_SZ, _launch_command())
+            winreg.DeleteValue(key, legacy_name)
+            return True
+    except OSError:
+        return False

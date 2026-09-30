@@ -83,6 +83,7 @@ class TrayIcon(QObject):
         self._avatar_visible = True
         self._autostart = False
         self._hooks_installed = False
+        self._hooks_stale = False
         self._capture_clipboard = config.clipboard.enabled
 
         self._icon = QSystemTrayIcon(mood_icon(Mood.CALM), self)
@@ -111,8 +112,9 @@ class TrayIcon(QObject):
     def set_autostart(self, enabled: bool) -> None:
         self._autostart = enabled
 
-    def set_hooks_installed(self, installed: bool) -> None:
+    def set_hooks_installed(self, installed: bool, stale: bool = False) -> None:
         self._hooks_installed = installed
+        self._hooks_stale = stale
 
     def set_clipboard_capture(self, enabled: bool) -> None:
         self._capture_clipboard = enabled
@@ -199,7 +201,7 @@ class TrayIcon(QObject):
 
         menu.addSeparator()
         toggle = menu.addAction(
-            "Masquer le lutin" if self._avatar_visible else "Afficher le lutin"
+            "Masquer le sorcier" if self._avatar_visible else "Afficher le sorcier"
         )
         toggle.triggered.connect(self.toggle_avatar_requested.emit)
         menu.addAction("Replacer sur la barre").triggered.connect(
@@ -220,7 +222,16 @@ class TrayIcon(QObject):
         autostart.toggled.connect(self.autostart_toggled.emit)
 
         menu.addSeparator()
-        if self._hooks_installed:
+        if self._hooks_stale:
+            # Installed, but pointing somewhere broken: offering only
+            # "uninstall" would strand the user with dead hooks.
+            menu.addAction("Réinstaller les hooks Claude Code…").triggered.connect(
+                self.install_hooks_requested.emit
+            )
+            menu.addAction("Désinstaller les hooks Claude Code").triggered.connect(
+                self.uninstall_hooks_requested.emit
+            )
+        elif self._hooks_installed:
             menu.addAction("Désinstaller les hooks Claude Code").triggered.connect(
                 self.uninstall_hooks_requested.emit
             )

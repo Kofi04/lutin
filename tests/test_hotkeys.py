@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from lutin.features.timers import parse_duration
-from lutin.winapi import (
+from wizard.features.timers import parse_duration
+from wizard.winapi import (
     MOD_ALT,
     MOD_CONTROL,
     MOD_NOREPEAT,

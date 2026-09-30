@@ -9,29 +9,29 @@ because a typo in a launcher entry should not cost you the whole avatar.
 
 from __future__ import annotations
 
-import os
 import shutil
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .branding import SLUG
+from .paths import config_dir, config_path, database_path
 
-
-def config_dir() -> Path:
-    """Where config.toml and the SQLite database live."""
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        return Path(appdata) / SLUG
-    return Path.home() / f".{SLUG.lower()}"
-
-
-def config_path() -> Path:
-    return config_dir() / "config.toml"
-
-
-def database_path() -> Path:
-    return config_dir() / "lutin.db"
+# Re-exported so callers keep importing paths from one place; the definitions
+# live in paths.py because they are tangled up with the rename migration.
+__all__ = [
+    "Appearance",
+    "ClaudeSettings",
+    "ClipboardSettings",
+    "Config",
+    "Hotkeys",
+    "LauncherEntry",
+    "MonitorSettings",
+    "config_dir",
+    "config_path",
+    "database_path",
+    "ensure_config_file",
+    "load_config",
+]
 
 
 DEFAULT_CONFIG_TEMPLATE = Path(__file__).resolve().parent / "config.default.toml"
@@ -71,7 +71,7 @@ class ClaudeSettings:
     enabled: bool = True
     # Below this, an unanswered request is denied. Silence is not consent.
     permission_timeout_seconds: int = 110
-    # Claude may edit files and run commands, each one approved in Lutin.
+    # Claude may edit files and run commands, each one approved in Little Wizard.
     allow_actions: bool = True
     # Read / Glob / Grep / WebFetch / WebSearch run without asking. They have no
     # side effects, but they do let Claude read any file you can read.

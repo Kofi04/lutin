@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from lutin.config import MonitorSettings
-from lutin.features.monitor import Sample, mood_for
-from lutin.mood import Mood, claude_mood_for, combine
-from lutin.winapi import CpuSampler
+from wizard.config import MonitorSettings
+from wizard.features.monitor import Sample, mood_for
+from wizard.mood import Mood, claude_mood_for, combine
+from wizard.winapi import CpuSampler
 
 SETTINGS = MonitorSettings(
     cpu_busy=65.0, cpu_stressed=88.0, ram_stressed=88.0, battery_low=20
@@ -100,7 +100,7 @@ def test_a_finished_session_still_shows():
 
 def test_every_mood_can_be_drawn():
     # A palette gap would paint the avatar with a KeyError at runtime.
-    from lutin.sprite import _PALETTE
+    from wizard.sprite import _PALETTE
 
     for mood in Mood:
         assert mood in _PALETTE, mood

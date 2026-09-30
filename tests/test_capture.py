@@ -7,8 +7,8 @@ import base64
 import pytest
 from PySide6.QtGui import QColor, QImage
 
-from lutin.capture import CaptureKind, estimate_tokens, fit_within, prepare
-from lutin.capture.prepare import MAX_EDGE
+from wizard.capture import CaptureKind, estimate_tokens, fit_within, prepare
+from wizard.capture.prepare import MAX_EDGE
 
 
 def image(width: int, height: int, colour: str = "#3366cc") -> QImage:

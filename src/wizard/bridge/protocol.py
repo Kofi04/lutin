@@ -4,7 +4,7 @@ Four bytes of big-endian length, then UTF-8 JSON. A named pipe is a byte
 stream, so without a length prefix two events written back to back would arrive
 as one unparseable blob.
 
-`hooks/lutin_hook.py` repeats these few lines instead of importing them. The
+`hooks/wizard_hook.py` repeats these few lines instead of importing them. The
 hook has to start in milliseconds and must keep working when the app is broken,
 so it stays free of any dependency on this package.
 """
@@ -16,7 +16,7 @@ import struct
 
 #: Named pipe QLocalServer listens on. QLocalServer maps this to
 #: \\.\pipe\<PIPE_NAME> on Windows.
-PIPE_NAME = "Lutin-hooks"
+PIPE_NAME = "LittleWizard-hooks"
 
 _HEADER = struct.Struct(">I")
 HEADER_SIZE = _HEADER.size

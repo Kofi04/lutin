@@ -7,9 +7,9 @@ import subprocess
 
 import pytest
 
-from lutin.claude import session as mod
-from lutin.claude.session import AuthStatus, check_auth
-from lutin.ui_claude import ToolRequest
+from wizard.claude import session as mod
+from wizard.claude.session import AuthStatus, check_auth
+from wizard.ui_claude import ToolRequest
 
 # -- describing tool calls -------------------------------------------------
 
@@ -138,7 +138,7 @@ def test_check_auth_survives_a_missing_cli(monkeypatch):
 
 @pytest.mark.parametrize(
     ("tool", "project", "expected"),
-    [("Bash", "", "Claude veut utiliser Bash"), ("Edit", "lutin", "dans lutin")],
+    [("Bash", "", "Claude veut utiliser Bash"), ("Edit", "wizard", "dans wizard")],
 )
 def test_tool_request_title(tool, project, expected):
     assert expected in ToolRequest(tool=tool, detail="x", project=project).title()

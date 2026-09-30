@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from lutin.sessions import EVENT_STATES, PALETTE, SessionRegistry, describe
+from wizard.sessions import EVENT_STATES, PALETTE, SessionRegistry, describe
 
 
 class FakeEvent:
@@ -18,17 +18,17 @@ class FakeEvent:
 def test_a_session_is_created_on_first_sight():
     registry = SessionRegistry()
 
-    session = registry.record("s1", "lutin", "working", "Edit app.py")
+    session = registry.record("s1", "wizard", "working", "Edit app.py")
 
-    assert session.project == "lutin"
+    assert session.project == "wizard"
     assert session.state == "working"
     assert session.last_action == "Edit app.py"
 
 
 def test_the_same_id_is_one_session():
     registry = SessionRegistry()
-    registry.record("s1", "lutin", "thinking")
-    registry.record("s1", "lutin", "working", "Bash pytest")
+    registry.record("s1", "wizard", "thinking")
+    registry.record("s1", "wizard", "working", "Bash pytest")
 
     assert len(registry.sessions) == 1
     assert registry.sessions[0].state == "working"
@@ -56,9 +56,9 @@ def test_colours_wrap_instead_of_running_out():
 def test_a_late_project_name_fills_in():
     registry = SessionRegistry()
     registry.record("s1", "", "idle")
-    registry.record("s1", "lutin", "working")
+    registry.record("s1", "wizard", "working")
 
-    assert registry.sessions[0].project == "lutin"
+    assert registry.sessions[0].project == "wizard"
 
 
 def test_active_lists_only_busy_sessions():

@@ -1,4 +1,4 @@
-"""Adding and removing Lutin's hooks in ~/.claude/settings.json.
+"""Adding and removing Little Wizard's hooks in ~/.claude/settings.json.
 
 This edits a file the user owns and that Claude Code depends on, so the rules
 are strict, and they are coucou's: back it up, *merge* rather than replace,
@@ -20,7 +20,18 @@ from pathlib import Path
 
 #: Marks an entry as ours. Uninstall removes exactly the entries whose command
 #: line mentions this, and nothing else.
-HOOK_SCRIPT_NAME = "lutin_hook.py"
+HOOK_SCRIPT_NAME = "wizard_hook.py"
+
+#: Names we have used in the past. A machine that installed the hooks when the
+#: app was called "Lutin" has `lutin_hook.py` in its settings.json, and that
+#: entry now points at a script that no longer exists: every tool call would
+#: spawn a process that fails. Recognising the old name is what lets
+#: "uninstall" clean it up, and what makes "install" replace it instead of
+#: stacking a second, broken entry beside the new one.
+LEGACY_HOOK_SCRIPT_NAMES = ("lutin_hook.py",)
+
+#: Every marker that means "this entry belongs to us".
+OWNED_SCRIPT_NAMES = (HOOK_SCRIPT_NAME, *LEGACY_HOOK_SCRIPT_NAMES)
 
 #: Fired in the background: they can never block or delay a session.
 OBSERVED_EVENTS = (
@@ -55,7 +66,7 @@ def settings_path() -> Path:
 
 
 def hook_script_path() -> Path:
-    """Where lutin_hook.py lives, whether running from source or frozen."""
+    """Where wizard_hook.py lives, whether running from source or frozen."""
     if getattr(sys, "frozen", False):  # PyInstaller
         return Path(sys.executable).parent / "hooks" / HOOK_SCRIPT_NAME
     return Path(__file__).resolve().parents[3] / "hooks" / HOOK_SCRIPT_NAME
@@ -94,7 +105,7 @@ def _entry(event: str, launcher: str, script: str, blocking: bool) -> dict:
     if blocking:
         hook["timeout"] = DECISION_TIMEOUT_S
     else:
-        # Observational: never hold up the session, whatever Lutin is doing.
+        # Observational: never hold up the session, whatever Little Wizard is doing.
         hook["async"] = True
 
     group: dict = {"hooks": [hook]}
@@ -104,7 +115,7 @@ def _entry(event: str, launcher: str, script: str, blocking: bool) -> dict:
 
 
 def build_hooks(launcher: str | None = None, script: str | None = None) -> dict:
-    """The `hooks` block Lutin wants, keyed by event name."""
+    """The `hooks` block Little Wizard wants, keyed by event name."""
     launcher = launcher or str(launcher_path())
     script = script or str(hook_script_path())
 
@@ -122,13 +133,13 @@ def _is_ours(group: dict) -> bool:
             continue
         args = " ".join(map(str, hook.get("args", []) or []))
         blob = f"{hook.get('command', '')} {args}"
-        if HOOK_SCRIPT_NAME in blob:
+        if any(name in blob for name in OWNED_SCRIPT_NAMES):
             return True
     return False
 
 
 def remove_hooks(settings: dict) -> dict:
-    """Drop only Lutin's entries, leaving every other hook untouched."""
+    """Drop only Little Wizard's entries, leaving every other hook untouched."""
     result = copy.deepcopy(settings)
     hooks = result.get("hooks")
     if not isinstance(hooks, dict):
@@ -151,7 +162,7 @@ def remove_hooks(settings: dict) -> dict:
 def merge_hooks(settings: dict, ours: dict) -> dict:
     """Add our entries next to whatever is already there.
 
-    Removes any previous Lutin entry first, so re-running the installer after
+    Removes any previous Little Wizard entry first, so re-running the installer after
     moving the project updates the paths instead of stacking duplicates.
     """
     result = remove_hooks(settings)
@@ -236,3 +247,36 @@ def is_installed(path: Path | None = None) -> bool:
         if isinstance(groups, list)
         for group in groups
     )
+
+
+def is_stale(path: Path | None = None) -> bool:
+    """True when our hooks are installed but point somewhere that no longer works.
+
+    Two ways that happens: the entry was written under the app's old name, or
+    the project folder moved and the recorded script path is gone. Either way
+    Claude Code would spawn a process that dies on every tool call. The caller
+    needs to know, because the fix is to *re-install* (which replaces the
+    entries) and a menu that only offers "uninstall" leaves the user stuck.
+    """
+    hooks = read_settings(path).get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    for groups in hooks.values():
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            if not isinstance(group, dict) or not _is_ours(group):
+                continue
+            for hook in group.get("hooks", []) or []:
+                if not isinstance(hook, dict):
+                    continue
+                args = [str(item) for item in hook.get("args", []) or []]
+                blob = f"{hook.get('command', '')} {' '.join(args)}"
+                if any(name in blob for name in LEGACY_HOOK_SCRIPT_NAMES):
+                    return True
+                script = next(
+                    (arg for arg in args if arg.endswith(HOOK_SCRIPT_NAME)), ""
+                )
+                if script and not Path(script).exists():
+                    return True
+    return False

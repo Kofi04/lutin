@@ -1,4 +1,4 @@
-"""Showing the settings.json diff before Lutin touches it.
+"""Showing the settings.json diff before Little Wizard touches it.
 
 `~/.claude/settings.json` belongs to the user and Claude Code depends on it, so
 nothing is written until the exact change has been shown and accepted. The
@@ -69,9 +69,9 @@ class HookDiffDialog(QDialog):
             self._confirm.setEnabled(False)
         else:
             self._intro.setText(
-                f"Lutin va modifier {plan.path}.\n"
+                f"Little Wizard va modifier {plan.path}.\n"
                 "Une copie horodatée est faite avant écriture, et seules les "
-                "entrées de Lutin sont touchées."
+                "entrées de Little Wizard sont touchées."
             )
             self._diff.setPlainText(plan.diff)
             self._confirm.setEnabled(True)

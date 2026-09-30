@@ -1,4 +1,4 @@
-"""Talking to Claude Code from inside Lutin."""
+"""Talking to Claude Code from inside Little Wizard."""
 
 from .session import AuthStatus, ClaudeSession, check_auth
 

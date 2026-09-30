@@ -1,7 +1,7 @@
-"""Claude Code hook handler: forward one event to Lutin, optionally wait.
+"""Claude Code hook handler: forward one event to Little Wizard, optionally wait.
 
-Run as `pythonw.exe lutin_hook.py <EventName>`. Standard library only, and no
-import from the `lutin` package: this runs on every tool call, must start in
+Run as `pythonw.exe wizard_hook.py <EventName>`. Standard library only, and no
+import from the `wizard` package: this runs on every tool call, must start in
 milliseconds, and must keep working when the app is broken or absent.
 
 The one rule that matters: **Claude Code is never blocked.** Every failure path
@@ -18,7 +18,7 @@ import sys
 import threading
 import time
 
-PIPE_PATH = r"\\.\pipe\Lutin-hooks"
+PIPE_PATH = r"\\.\pipe\LittleWizard-hooks"
 HEADER = struct.Struct(">I")
 
 #: How long to wait for the app to accept the connection. Past this the app is
@@ -103,7 +103,11 @@ def _decision_output(event: str, decision: str) -> dict | None:
     if decision == "allow":
         body = {"behavior": "allow"}
     elif decision == "deny":
-        body = {"behavior": "deny", "message": "Refusé depuis Lutin.", "interrupt": False}
+        body = {
+            "behavior": "deny",
+            "message": "Refusé depuis Little Wizard.",
+            "interrupt": False,
+        }
     else:
         return None  # "defer" and anything unknown: stay out of the way
     return {"hookSpecificOutput": {"hookEventName": event, "decision": body}}
@@ -112,9 +116,9 @@ def _decision_output(event: str, decision: str) -> dict | None:
 def main() -> None:
     event = sys.argv[1] if len(sys.argv) > 1 else "Unknown"
 
-    # Sessions Lutin started itself already answer through the SDK's permission
+    # Sessions Little Wizard started itself already answer through the SDK's permission
     # callback. Reporting them again would double every prompt.
-    if os.environ.get("LUTIN_OWN_SESSION"):
+    if os.environ.get("WIZARD_OWN_SESSION"):
         _bail()
 
     blocking = event in BLOCKING_EVENTS

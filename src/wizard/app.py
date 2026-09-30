@@ -24,6 +24,7 @@ from .branding import (
     APP_NAME,
     APP_USER_MODEL_ID,
     INSTANCE_KEY,
+    LEGACY_AUTOSTART_VALUE,
     ORG_NAME,
 )
 from .bridge import HookServer
@@ -43,6 +44,7 @@ from .features.monitor import SystemMonitor
 from .features.timers import Reminder, TimerManager
 from .hotkeys import GlobalHotkeys
 from .mood import Mood, claude_mood_for, combine
+from .paths import migrate_legacy_data
 from .sessions import EVENT_STATES, SessionRegistry, describe
 from .storage import Storage
 from .tray import TrayIcon, app_icon
@@ -73,6 +75,12 @@ class AvatarApp:
         # Held as an attribute: releasing it would free the lock.
         self._instance_lock = QSharedMemory(INSTANCE_KEY)
         self._already_running = not self._instance_lock.create(1)
+
+        # Before anything reads a file: carry across the data the app wrote
+        # under its previous name. Must happen ahead of ensure_config_file(),
+        # or that would create a fresh default config and the copy would then
+        # decline to overwrite it.
+        self._migration = migrate_legacy_data()
 
         ensure_config_file()
         self.config: Config = load_config()
@@ -137,15 +145,18 @@ class AvatarApp:
             QMessageBox.critical(
                 None,
                 APP_NAME,
-                "Aucune zone de notification n'est disponible : le lutin "
+                "Aucune zone de notification n'est disponible : le sorcier "
                 "n'aurait pas de menu.",
             )
             return 1
 
         winapi.set_app_user_model_id(APP_USER_MODEL_ID)
+        winapi.migrate_autostart_value(LEGACY_AUTOSTART_VALUE)
 
         self.tray.set_autostart(winapi.autostart_enabled())
-        self.tray.set_hooks_installed(hooks_installer.is_installed())
+        self.tray.set_hooks_installed(
+            hooks_installer.is_installed(), hooks_installer.is_stale()
+        )
         if not self.bridge.start():
             self.tray.notify(
                 "Hooks",
@@ -502,6 +513,8 @@ class AvatarApp:
         self._report_startup_problems(reloaded=True)
 
     def _report_startup_problems(self, reloaded: bool = False) -> None:
+        if not reloaded:
+            self._report_rename()
         problems = list(self.config.warnings) + self.hotkeys.failures
         if problems:
             self.tray.notify(
@@ -512,6 +525,28 @@ class AvatarApp:
         elif reloaded:
             self.tray.notify(
                 "Configuration rechargée", "Tous les réglages ont été appliqués."
+            )
+
+    def _report_rename(self) -> None:
+        """Tell the user what the rename did, once, and only if it did something."""
+        summary = self._migration.summary()
+        if summary:
+            self.tray.notify(f"Bienvenue dans {APP_NAME}", summary)
+        if self._migration.failures:
+            self.tray.notify(
+                "Récupération incomplète",
+                "\n".join(self._migration.failures[:3]),
+                warning=True,
+            )
+        if hooks_installer.is_stale():
+            # The hooks point at a script that has moved or been renamed, so
+            # every tool call in your terminals is starting a process that dies.
+            self.tray.notify(
+                "Hooks à réinstaller",
+                "Les hooks Claude Code pointent vers l'ancien emplacement. "
+                "Choisissez « Installer les hooks Claude Code… » pour les "
+                "remettre à jour.",
+                warning=True,
             )
 
 

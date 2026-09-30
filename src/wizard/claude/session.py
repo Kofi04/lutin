@@ -31,7 +31,7 @@ from ..ui_claude import ToolRequest
 #: Tools Claude may use without ever asking. Read-only, no side effects.
 READ_ONLY_TOOLS = ["Read", "Glob", "Grep", "WebFetch", "WebSearch"]
 
-_DENY_ON_TIMEOUT = "Aucune réponse de Lutin : action refusée par sécurité."
+_DENY_ON_TIMEOUT = "Aucune réponse de Little Wizard : action refusée par sécurité."
 
 
 @dataclass(frozen=True)
@@ -127,7 +127,7 @@ class ClaudeSession(QObject):
 
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(
-            target=self._run_loop, name="lutin-claude", daemon=True
+            target=self._run_loop, name="wizard-claude", daemon=True
         )
         self._thread.start()
 
@@ -233,9 +233,9 @@ class ClaudeSession(QObject):
                 "Si on te montre une capture d'écran, décris ce qui compte, "
                 "pas chaque pixel."
             ),
-            # Marks sessions Lutin started, so the hook bridge can tell them
+            # Marks sessions Little Wizard started, so the hook bridge can tell them
             # apart from the user's own terminals and stay out of the way.
-            env={"LUTIN_OWN_SESSION": "1"},
+            env={"WIZARD_OWN_SESSION": "1"},
         )
 
     def _prompt(self, question: str, capture: Capture | None):
@@ -333,7 +333,9 @@ class ClaudeSession(QObject):
             return PermissionResultAllow()
         if decision == "allow":
             return PermissionResultAllow()
-        return PermissionResultDeny(message="Refusé depuis Lutin.", interrupt=False)
+        return PermissionResultDeny(
+            message="Refusé depuis Little Wizard.", interrupt=False
+        )
 
     def answer_permission(self, request_id: int, decision: str) -> None:
         """Answer a pending request. Safe from the GUI thread."""

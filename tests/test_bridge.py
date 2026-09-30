@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from lutin.bridge import installer, protocol
+from wizard.bridge import installer, protocol
 
 # -- framing ---------------------------------------------------------------
 
@@ -52,7 +52,7 @@ def test_a_non_object_frame_is_rejected():
 
 def hooks():
     return installer.build_hooks(
-        launcher="C:/py/pythonw.exe", script="C:/l/lutin_hook.py"
+        launcher="C:/py/pythonw.exe", script="C:/l/wizard_hook.py"
     )
 
 
@@ -86,7 +86,7 @@ def test_exec_form_is_used():
     hook = hooks()["PreToolUse"][0]["hooks"][0]
 
     assert hook["command"].endswith(".exe")
-    assert hook["args"][0].endswith("lutin_hook.py")
+    assert hook["args"][0].endswith("wizard_hook.py")
     assert hook["args"][1] == "PreToolUse"
 
 
@@ -184,7 +184,7 @@ def test_apply_backs_up_then_writes(tmp_path):
 
     plan = installer.plan_install(path)
     assert plan.changed
-    assert "lutin_hook.py" in plan.diff
+    assert "wizard_hook.py" in plan.diff
 
     saved = installer.apply(plan)
 
@@ -210,3 +210,89 @@ def test_uninstall_restores_the_original(tmp_path):
     installer.apply(installer.plan_uninstall(path))
 
     assert json.loads(path.read_text(encoding="utf-8")) == foreign()
+
+
+# -- the rename: hooks written under the old name ---------------------------
+
+
+def legacy_hooks() -> dict:
+    """What settings.json looks like after an install under the old app name."""
+    return {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "C:/py/pythonw.exe",
+                            "args": ["C:/old/hooks/lutin_hook.py", "PreToolUse"],
+                            "async": True,
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+
+def test_legacy_entries_are_recognised_as_ours(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(legacy_hooks()), encoding="utf-8")
+
+    # If we did not recognise the old marker, "uninstall" would silently leave
+    # a hook behind that spawns a dead process on every single tool call.
+    assert installer.is_installed(path) is True
+
+
+def test_uninstall_removes_legacy_entries(tmp_path):
+    settings = legacy_hooks()
+    cleaned = installer.remove_hooks(settings)
+
+    assert "hooks" not in cleaned
+
+
+def test_install_replaces_legacy_entries_instead_of_stacking(tmp_path):
+    merged = installer.merge_hooks(legacy_hooks(), installer.build_hooks())
+
+    groups = merged["hooks"]["PreToolUse"]
+    assert len(groups) == 1
+    blob = json.dumps(groups)
+    assert "lutin_hook.py" not in blob
+    assert "wizard_hook.py" in blob
+
+
+def test_legacy_entries_count_as_stale(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(legacy_hooks()), encoding="utf-8")
+
+    assert installer.is_stale(path) is True
+
+
+def test_a_missing_script_path_counts_as_stale(tmp_path):
+    ours = installer.build_hooks(
+        launcher="C:/py/pythonw.exe",
+        script=str(tmp_path / "moved-away" / "wizard_hook.py"),
+    )
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"hooks": ours}), encoding="utf-8")
+
+    assert installer.is_stale(path) is True
+
+
+def test_a_real_install_is_not_stale(tmp_path):
+    script = tmp_path / "wizard_hook.py"
+    script.write_text("# hook\n", encoding="utf-8")
+    ours = installer.build_hooks(launcher="C:/py/pythonw.exe", script=str(script))
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"hooks": ours}), encoding="utf-8")
+
+    assert installer.is_installed(path) is True
+    assert installer.is_stale(path) is False
+
+
+def test_foreign_hooks_are_never_stale(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(foreign()), encoding="utf-8")
+
+    assert installer.is_stale(path) is False

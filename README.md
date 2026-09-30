@@ -1,4 +1,4 @@
-# Lutin
+# Little Wizard
 
 A small animated companion that floats just above the Windows taskbar, with a
 tray icon, global hotkeys, clipboard history, quick notes and countdown
@@ -6,11 +6,29 @@ reminders. Its mood reflects what your machine is doing.
 
 ![the eight moods](docs/moods.png)
 
+> **This app used to be called Lutin.** The rename moved its data folder from
+> `%APPDATA%\Lutin` to `%APPDATA%\LittleWizard`, so the first start after
+> upgrading **copies** your settings, notes, clipboard history and saved avatar
+> position across and tells you it did. The old folder is left exactly as it
+> was — delete it yourself once you are satisfied. If you had the Claude Code
+> hooks installed, they still point at the old script name: the tray menu
+> offers *Réinstaller les hooks Claude Code…* to fix that, and says so on
+> startup.
+
 ## Requirements
 
 - Windows 10 or 11
 - Python 3.11+ (tested on 3.14)
-- PySide6 — the only runtime dependency
+- PySide6 — the only runtime dependency (plus `claude-agent-sdk` for the Claude
+  features and `pygments` for code highlighting)
+
+Optional extras, each of which the app starts fine without:
+
+| Extra | Brings | Needed for |
+|---|---|---|
+| `[voice]` | Windows on-device speech bindings (~5 MB, no model download) | talking to Claude, dictation, spoken answers |
+| `[live]` | `sounddevice` | transcribing system audio during a meeting |
+| `[ocr]` | Windows OCR bindings | copying text out of a screen region locally |
 
 ## Install
 
@@ -20,22 +38,22 @@ py -3.14 -m venv .venv
 powershell -ExecutionPolicy Bypass -File scripts\shortcut.ps1
 ```
 
-The last line puts a **Lutin** icon on the Desktop and in the Start
+The last line puts a **Little Wizard** icon on the Desktop and in the Start
 Menu. Double-click it to launch — that is the whole story from then on. To keep
 it one click away, right-click the Start Menu entry → *More* → *Pin to taskbar*.
 
 `scripts\shortcut.ps1 -Remove` deletes both shortcuts again;
 `-DesktopOnly` skips the Start Menu entry.
 
-The shortcut points at `.venv\Scripts\lutin.exe`, the GUI launcher that
+The shortcut points at `.venv\Scripts\wizard.exe`, the GUI launcher that
 `pip install -e .` generates from the `[project.gui-scripts]` entry point. It is
 a GUI-subsystem binary, so no console window ever appears. If you prefer the
-command line, `.venv\Scripts\pythonw.exe -m lutin` does the same thing.
+command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
 
 > **The shortcut hard-codes this folder.** Move or rename the project and the
 > icon breaks — just re-run `scripts\shortcut.ps1` to point it at the new path.
 
-> **Windows 10 hides new tray icons.** On first run the avatar's tray icon goes
+> **Windows 10 hides new tray icons.** On first run the wizard's tray icon goes
 > into the overflow area behind the `^` chevron. Drag it onto the taskbar, or
 > use *Taskbar settings → Select which icons appear on the taskbar*, to keep it
 > visible.
@@ -58,7 +76,7 @@ command line, `.venv\Scripts\pythonw.exe -m lutin` does the same thing.
 | Quick note | `Ctrl+Alt+N` | *Note rapide* |
 | Clipboard history | `Ctrl+Alt+V` | *Presse-papiers* (or a single tray click) |
 | Launcher menu | `Ctrl+Alt+Space` | *Lancer* |
-| Show / hide the avatar | `Ctrl+Alt+A` | *Masquer / Afficher le lutin* |
+| Show / hide the avatar | `Ctrl+Alt+A` | *Masquer / Afficher le sorcier* |
 | Reminders | — | *Me rappeler…* |
 
 - **Left-click the avatar** opens the full action menu; **drag it** to move it
@@ -79,7 +97,7 @@ command line, `.venv\Scripts\pythonw.exe -m lutin` does the same thing.
   opens the question panel; the answer streams back in place. The conversation
   persists (the SDK's `resume`) until *Nouvelle discussion Claude*.
 - **Approvals** appear on the avatar with Autoriser / Toujours / Refuser, for
-  both the sessions Lutin starts and the ones you run yourself. Not answering
+  both the sessions Little Wizard starts and the ones you run yourself. Not answering
   denies: silence is not consent.
 - **Your own Claude Code sessions** show up too, once the hooks are installed:
   what each one is reading, editing and running, one coloured avatar per
@@ -87,14 +105,14 @@ command line, `.venv\Scripts\pythonw.exe -m lutin` does the same thing.
 
 ## Claude Code hooks
 
-*Installer les hooks Claude Code…* in the tray menu adds Lutin to
+*Installer les hooks Claude Code…* in the tray menu adds Little Wizard to
 `~/.claude/settings.json` so your own sessions show up in the avatar and their
 permission prompts can be answered there. Before writing anything it backs the
 file up with a timestamp, **merges** rather than replaces, and shows you the
-exact diff. Uninstalling removes only Lutin's entries.
+exact diff. Uninstalling removes only Little Wizard's entries.
 
 The rule that governs the whole bridge: **a Claude Code session is never
-blocked by Lutin.** Observational events are registered with `"async": true`,
+blocked by Little Wizard.** Observational events are registered with `"async": true`,
 so they cannot delay a session at all. Only `PermissionRequest` waits, and
 every failure path in the hook exits 0 with no output, which leaves the normal
 permission flow untouched. Measured with the app stopped: the hook returns in
@@ -112,13 +130,13 @@ claude auth status    # "loggedIn": true
 claude auth login     # if not
 ```
 
-Lutin uses your existing subscription through the Agent SDK. There is no API
+Little Wizard uses your existing subscription through the Agent SDK. There is no API
 key to obtain and nothing billed on top.
 
 ## Configuration
 
-Edit `%APPDATA%\Lutin\config.toml` (created on first run from
-`src/lutin/config.default.toml`), then pick **Recharger la configuration** in the tray menu.
+Edit `%APPDATA%\LittleWizard\config.toml` (created on first run from
+`src/wizard/config.default.toml`), then pick **Recharger la configuration** in the tray menu.
 No restart needed, hotkeys included.
 
 Launcher entries take anything the Run dialog accepts — an executable, a
@@ -140,19 +158,37 @@ app reports what it ignored in a tray notification.
 
 ## Data and privacy
 
-Everything stays on your machine, in `%APPDATA%\Lutin\`:
+What is stored, all of it on your machine, in `%APPDATA%\LittleWizard\`:
 
 - `config.toml` — your settings
-- `lutin.db` — notes and clipboard history (SQLite)
+- `wizard.db` — notes and clipboard history (SQLite)
 - `state.ini` — the avatar's last position
 
-Nothing is sent anywhere, and there is no network code in this project. Since
-clipboard history captures whatever you copy — passwords included — turn
-**Enregistrer le presse-papiers** off in the tray menu before copying secrets, or set
-`clipboard.enabled = false`.
+`%APPDATA%\Lutin\` may also still exist: it is the pre-rename folder, kept as a
+backup, plus a `.migrated-to-LittleWizard` marker. Nothing reads it after the
+first start.
 
-*Lancer au démarrage de Windows* writes one `HKCU\...\CurrentVersion\Run` value and removes
-it when you untick it. Nothing else touches the registry.
+**What leaves your machine.** Asking Claude sends your question and, when you
+attach one, the capture — to Anthropic, through the Claude Code CLI you are
+already signed in to. That is the whole point of the feature, and it is the only
+network traffic this app causes: there is no telemetry, no analytics and no
+other endpoint. Two guarantees around it:
+
+- **No capture is ever sent without you seeing it first**, in a confirmation
+  window that shows exactly the image that will go. There is deliberately no
+  setting to skip it.
+- **Nothing is captured in the background.** Every capture starts from an action
+  you took.
+
+Since clipboard history captures whatever you copy — passwords included — turn
+**Enregistrer le presse-papiers** off in the tray menu before copying secrets, or
+set `clipboard.enabled = false`. A screenshot carries the same risk over a wider
+area: displayed passwords, private messages, client data. Check the preview.
+
+*Lancer au démarrage de Windows* writes one `HKCU\...\CurrentVersion\Run` value
+and removes it when you untick it. The first start after the rename also removes
+the old `Lutin` value and writes the new one in its place, so autostart keeps
+working. Nothing else touches the registry.
 
 ## Tests
 
@@ -162,11 +198,12 @@ it when you untick it. Nothing else touches the registry.
 
 The suite covers the logic that is worth protecting and does not need a
 display: config parsing and clamping, SQLite behaviour (dedup, pruning, LIKE
-escaping), the mood thresholds, and the hotkey/duration parsers.
+escaping), the mood thresholds, the hotkey/duration parsers, image sizing,
+the hook framing and settings.json surgery, and the rename migration.
 
 ## The icon
 
-`src/lutin/app.ico` is generated, not hand-drawn — it comes from the same
+`src/wizard/app.ico` is generated, not hand-drawn — it comes from the same
 `draw_avatar` code as the running avatar:
 
 ```powershell
@@ -181,24 +218,25 @@ thickens the mouth — at 16px the default proportions blur into the body.
 ## Packaging
 
 ```powershell
-.venv\Scripts\pyinstaller.exe --noconsole --onefile --name Lutin ^
-  --icon src\lutin\app.ico ^
-  --add-data "src\lutin\config.default.toml;lutin" ^
-  --add-data "src\lutin\app.ico;lutin" ^
+.venv\Scripts\pyinstaller.exe --noconsole --onefile --name Wizard ^
+  --icon src\wizard\app.ico ^
+  --add-data "src\wizard\config.default.toml;wizard" ^
+  --add-data "src\wizard\app.ico;wizard" ^
   --paths src ^
-  src\lutin\__main__.py
+  src\wizard\__main__.py
 ```
 
 `--icon` sets the icon baked into the .exe; the second `--add-data` ships the
 same file inside the bundle so `app_icon()` still finds it at runtime for the
-dialogs. Point `scripts\shortcut.ps1` at `dist\Lutin.exe` afterwards, or
+dialogs. Point `scripts\shortcut.ps1` at `dist\Wizard.exe` afterwards, or
 just make a shortcut to it by hand — a packaged build needs no virtualenv.
 
 ## Architecture
 
 ```
-src/lutin/
+src/wizard/
   branding.py       the app name and every identifier derived from it
+  paths.py          where files live, and the migration from the old name
   mood.py           the eight moods, and which one wins
   sessions.py       every Claude Code session seen, internal or external
   claude/           the Agent SDK: one persistent session, permissions
@@ -207,8 +245,6 @@ src/lutin/
   ui_claude.py      ask panel, approval card
   ui_capture.py     the confirm-before-send preview
   ui_hooks.py       the settings.json diff
-hooks/
-  lutin_hook.py     the hook handler Claude Code spawns (stdlib only)
   app.ico           the app icon, generated by tools/make_icon.py
   winapi.py         ctypes wrappers: taskbar, CPU/RAM/battery, hotkeys, autostart
   config.py         TOML loading with defaults and clamping
@@ -220,10 +256,13 @@ hooks/
   ui.py             quick note, history panel, reminder dialog
   app.py            wiring only: who talks to whom
   features/         launcher, clipboard watcher, monitor, timers
+hooks/
+  wizard_hook.py    the hook handler Claude Code spawns (stdlib only)
 scripts/
   shortcut.ps1      creates/removes the Desktop and Start Menu shortcuts
 tools/
   make_icon.py      renders sprite.py into a multi-resolution app.ico
+PLAN.md             the plan this app is being built out against
 ```
 
 Decisions worth knowing about:
@@ -237,10 +276,10 @@ Decisions worth knowing about:
   `QAbstractNativeEventFilter` is the supported place to intercept it. A
   never-shown widget owns the registrations so hotkeys survive hiding the
   avatar.
-- **Two permission paths, one panel.** Sessions Lutin starts are gated by the
+- **Two permission paths, one panel.** Sessions Little Wizard starts are gated by the
   SDK's `can_use_tool` callback; sessions you start are gated by the hook. Both
-  end up in the same approval card, and the hook skips sessions Lutin started
-  (`LUTIN_OWN_SESSION`) so nothing is asked twice.
+  end up in the same approval card, and the hook skips sessions Little Wizard started
+  (`WIZARD_OWN_SESSION`) so nothing is asked twice.
 - **The bridge is a named pipe.** `QLocalServer` is one on Windows, which is
   the exact equivalent of the Unix socket coucou uses, and it already lives in
   the Qt event loop.
@@ -253,3 +292,8 @@ Decisions worth knowing about:
 - Clipboard history is text only — images and files are ignored.
 - The avatar is always-on-top, so it can cover a corner of a window underneath.
   Drag it somewhere else, or hide it with `Ctrl+Alt+A`.
+- **Packaging does not currently work on this machine.** PyInstaller has no
+  wheel for Python 3.14, so the command in *Packaging* above cannot run until
+  either PyInstaller ships one or you build the app on 3.12/3.13. The command
+  itself is correct; it is the tool that is missing.
+- There is no CI. The tests and the linter are run by hand.

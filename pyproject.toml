@@ -3,23 +3,51 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lutin"
-version = "0.1.0"
-description = "Un petit compagnon de bureau pose sur la barre des taches Windows"
+name = "little-wizard"
+version = "0.2.0"
+description = "Un petit sorcier de bureau pose sur la barre des taches Windows"
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.7", "claude-agent-sdk==0.2.161"]
+# PySide6 is the only hard GUI dependency, and claude-agent-sdk the only way to
+# drive Claude Code from Python. Pygments is small, pure Python and already in
+# the tree (claude-agent-sdk pulls it); the alternative is hand-writing a
+# QSyntaxHighlighter per language, which is reinventing it badly.
+dependencies = ["PySide6>=6.7", "claude-agent-sdk==0.2.161", "pygments>=2.17"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pyinstaller>=6", "ruff>=0.6"]
+# Every extra must be optional in the real sense: the app starts without it and
+# disables the matching feature with an explanation, never a traceback.
+# Speech recognition and synthesis come from Windows itself, on-device: about
+# 5 MB of bindings and no model to download. The microphone goes through
+# QtMultimedia, so it costs nothing extra.
+voice = [
+    "winrt-runtime>=3.2",
+    "winrt-Windows.Media.SpeechRecognition>=3.2",
+    "winrt-Windows.Media.SpeechSynthesis>=3.2",
+    "winrt-Windows.Globalization>=3.2",
+    "winrt-Windows.Storage.Streams>=3.2",
+    "winrt-Windows.Foundation>=3.2",
+]
+# System audio (what the other participants say) needs WASAPI loopback, which
+# QtMultimedia cannot do.
+live = ["sounddevice>=0.5"]
+# Local OCR, again from Windows: no network, no service, no API key.
+ocr = [
+    "winrt-runtime>=3.2",
+    "winrt-Windows.Media.Ocr>=3.2",
+    "winrt-Windows.Graphics.Imaging>=3.2",
+    "winrt-Windows.Globalization>=3.2",
+    "winrt-Windows.Storage.Streams>=3.2",
+]
+dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.gui-scripts]
-lutin = "lutin.app:main"
+wizard = "wizard.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-lutin = ["config.default.toml", "app.ico"]
+wizard = ["config.default.toml", "app.ico"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

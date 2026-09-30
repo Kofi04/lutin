@@ -1,4 +1,4 @@
-"""Every Claude Code session Lutin knows about, internal or external.
+"""Every Claude Code session Little Wizard knows about, internal or external.
 
 A session is named after its working directory, the way coucou does it: that is
 what you recognise at a glance, and it survives restarts of the terminal.

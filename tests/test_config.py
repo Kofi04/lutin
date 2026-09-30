@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from lutin.config import load_config
+from wizard.config import load_config
 
 
 def write(tmp_path, body: str):

@@ -25,8 +25,8 @@ from PySide6.QtCore import QBuffer, QByteArray, Qt  # noqa: E402
 from PySide6.QtGui import QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from lutin.features.monitor import Mood  # noqa: E402
-from lutin.sprite import SpriteState, draw_avatar  # noqa: E402
+from wizard.features.monitor import Mood  # noqa: E402
+from wizard.sprite import SpriteState, draw_avatar  # noqa: E402
 
 # Every size Windows asks for: 16 in the taskbar and tray, 32 on the desktop,
 # 48 in medium-icon views, 256 for the extra-large view and the file dialog.
@@ -119,7 +119,7 @@ def build_ico(frames: dict[int, QByteArray]) -> bytes:
 def main() -> int:
     app = QApplication(sys.argv)  # noqa: F841 - QPixmap needs a live application
 
-    target = pathlib.Path(__file__).resolve().parent.parent / "src" / "lutin" / "app.ico"
+    target = pathlib.Path(__file__).resolve().parent.parent / "src" / "wizard" / "app.ico"
     frames = {size: render(size) for size in SIZES}
     target.write_bytes(build_ico(frames))
 

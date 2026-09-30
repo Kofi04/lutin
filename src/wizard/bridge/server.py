@@ -17,7 +17,7 @@ from .protocol import HEADER_SIZE, PIPE_NAME, decode, encode, frame_length
 
 @dataclass
 class HookEvent:
-    """One event from a Claude Code session outside Lutin."""
+    """One event from a Claude Code session outside Little Wizard."""
 
     name: str
     payload: dict = field(default_factory=dict)
