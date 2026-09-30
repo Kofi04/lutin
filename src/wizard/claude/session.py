@@ -311,6 +311,19 @@ class ClaudeSession(QObject):
         self._frame = None
         asyncio.run_coroutine_threadsafe(self._restart(), self._loop)
 
+    def resume(self, session_id: str) -> None:
+        """Continue an earlier conversation, picked from the history.
+
+        Same mechanics as `reset`, but reconnecting with `resume=` so Claude
+        Code reloads that session's context instead of starting blank. The
+        screenshot frame is dropped: the arrows must never be aimed through an
+        image from a conversation Claude is no longer looking at.
+        """
+        self._session_id = session_id
+        self._always.clear()
+        self._frame = None
+        asyncio.run_coroutine_threadsafe(self._restart(), self._loop)
+
     async def _restart(self) -> None:
         await self._drop_client()
         self._set_state(OFFLINE)

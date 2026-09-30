@@ -193,7 +193,12 @@ app reports what it ignored in a tray notification.
 What is stored, all of it on your machine, in `%APPDATA%\LittleWizard\`:
 
 - `config.toml` — your settings
-- `wizard.db` — notes and clipboard history (SQLite)
+- `wizard.db` — notes, clipboard history, and the history of your
+  conversations with Claude (SQLite): questions, answers, the actions you
+  allowed or refused, and a **256 px thumbnail** of each capture — never the
+  full image. Turn it off with `history.enabled = false`, purge it by age with
+  `history.retention_days`, or wipe it with *Tout effacer…* in the History
+  window.
 - `state.ini` — the avatar's last position
 
 `%APPDATA%\Lutin\` may also still exist: it is the pre-rename folder, kept as a
@@ -217,6 +222,10 @@ Since clipboard history captures whatever you copy — passwords included — tu
 set `clipboard.enabled = false`. A screenshot carries the same risk over a wider
 area: displayed passwords, private messages, client data. Check the preview.
 
+The History window's *Mes sessions Claude Code* view **reads** the transcripts
+in `~/.claude/projects` when you open it, and never writes to them. Nothing
+from them is copied into `wizard.db`.
+
 *Lancer au démarrage de Windows* writes one `HKCU\...\CurrentVersion\Run` value
 and removes it when you untick it. The first start after the rename also removes
 the old `Lutin` value and writes the new one in its place, so autostart keeps
@@ -232,6 +241,30 @@ The suite covers the logic that is worth protecting and does not need a
 display: config parsing and clamping, SQLite behaviour (dedup, pruning, LIKE
 escaping), the mood thresholds, the hotkey/duration parsers, image sizing,
 the hook framing and settings.json surgery, and the rename migration.
+
+## Conversation history
+
+*Historique des discussions…* (tray menu or command palette) lists every
+conversation, grouped by day with pinned ones on top, and filters by kind.
+Search is SQLite FTS5 with accent folding, so `reunion` finds *réunion*; what
+you type is turned into quoted prefix terms first, so a stray quote or `OR`
+is searched for rather than parsed as query syntax (raw FTS5 raises on an
+unbalanced quote). Rename, pin, delete, export to Markdown — and **Reprendre**,
+which reconnects with the SDK's `resume` so Claude has the old context back.
+
+The last filter, *Mes sessions Claude Code*, reads the transcripts Claude Code
+keeps in `~/.claude/projects`. Strictly read-only: those files are Claude
+Code's state, and a damaged transcript can break resuming it in the terminal.
+Their format is Claude Code's and changes between versions, so the reader
+skips anything it does not recognise instead of failing.
+
+**The schema is versioned now.** It used to be a `CREATE TABLE IF NOT EXISTS`
+script, which works right up to the first new column: on an existing database
+the create is skipped and the next query fails, on the user's machine only.
+`schema.py` is a ladder of numbered migrations on `PRAGMA user_version`, each
+applied once inside a transaction; a failed step leaves nothing behind, and a
+database newer than the code is refused rather than touched. Verified on a
+copy of a real pre-versioning database: version 0 to 3, every row identical.
 
 ## On-screen guidance
 
@@ -458,6 +491,10 @@ src/wizard/
   markdown_blocks.py  splitting an answer into prose and highlighted code
   overlay/          on-screen guidance: mapping, scene, surfaces, MCP tools
   capture/cloak.py  keeps our windows out of our own screenshots
+  schema.py         numbered SQLite migrations on PRAGMA user_version
+  history.py        conversations, messages, thumbnails, FTS5 search
+  claude_transcripts.py  read-only access to ~/.claude/projects
+  ui_history.py     the History window
   avatar_window.py  the frameless translucent always-on-top window
   hotkeys.py        RegisterHotKey bridged into Qt via a native event filter
   tray.py           tray icon and menu

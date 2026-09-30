@@ -12,22 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS notes (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    body       TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS clips (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    body       TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_notes_created ON notes (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_clips_created ON clips (created_at DESC);
-"""
+from .schema import migrate
 
 
 @dataclass(frozen=True)
@@ -60,8 +45,16 @@ class Storage:
         # WAL keeps reads from blocking the UI while a write is in flight.
         if self.path.name != ":memory:":
             self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        # Cascading deletes (a conversation takes its messages with it) are
+        # off by default in SQLite, per connection.
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        #: Versions applied on this open, for the tests and the first-run log.
+        self.migrated = migrate(self._conn)
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """Shared with the history store: one database, one connection."""
+        return self._conn
 
     def close(self) -> None:
         self._conn.close()

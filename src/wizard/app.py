@@ -45,6 +45,7 @@ from .features.clipboard import ClipboardWatcher
 from .features.launcher import LaunchError, launch
 from .features.monitor import SystemMonitor
 from .features.timers import Reminder, TimerManager
+from .history import CaptureInfo, HistoryStore
 from .hotkeys import GlobalHotkeys
 from .mood import Mood, claude_mood_for, combine
 from .overlay.manager import OverlayManager
@@ -55,6 +56,7 @@ from .tray import TrayIcon, app_icon
 from .ui import HistoryPanel, QuickNoteDialog, ReminderDialog
 from .ui_capture import CapturePreview
 from .ui_claude import ApprovalCard, AskPanel, ToolRequest
+from .ui_history import HistoryWindow
 from .ui_hooks import HookDiffDialog, summarise_backup
 from .ui_onboarding import Check, OnboardingDialog, already_shown, mark_shown
 from .ui_palette import Command, CommandPalette
@@ -107,6 +109,14 @@ class AvatarApp:
         self._apply_theme(self.theme.theme)
 
         self.storage = Storage(database_path())
+        self.history = HistoryStore(self.storage.connection)
+        if self.config.history.enabled:
+            self.history.purge_older_than(self.config.history.retention_days)
+        #: The conversation the answer panel is currently part of.
+        self._conversation_id: int | None = None
+        self._answer_buffer = ""
+        self._history_window: HistoryWindow | None = None
+        self._approval_request = None
         self.timers = TimerManager()
         self.monitor = SystemMonitor(self.config.monitor)
         self.clipboard = ClipboardWatcher(self.storage, self.config.clipboard)
@@ -267,9 +277,7 @@ class AvatarApp:
         self.bridge.event.connect(self._on_hook_event)
         self.bridge.decision_requested.connect(self._on_bridge_decision)
         self.tray.install_hooks_requested.connect(lambda: self._manage_hooks(True))
-        self.tray.uninstall_hooks_requested.connect(
-            lambda: self._manage_hooks(False)
-        )
+        self.tray.uninstall_hooks_requested.connect(lambda: self._manage_hooks(False))
 
         self.tray.quick_note_requested.connect(self._open_quick_note)
         self.tray.clipboard_requested.connect(
@@ -288,6 +296,7 @@ class AvatarApp:
         self.tray.autostart_toggled.connect(self._set_autostart)
         self.tray.reload_config_requested.connect(self.reload_config)
         self.tray.settings_requested.connect(self._open_settings)
+        self.tray.history_requested.connect(self._open_history_window)
         self.tray.open_config_folder_requested.connect(self._open_config_folder)
         self.tray.quit_requested.connect(self.shutdown)
 
@@ -301,9 +310,7 @@ class AvatarApp:
         self.hotkeys.register(hotkeys.toggle_avatar, self._toggle_avatar)
         self.hotkeys.register(hotkeys.capture_region, self.capture.start_region)
         self.hotkeys.register(hotkeys.ask_claude, lambda: self._open_ask(None))
-        self.hotkeys.register(
-            hotkeys.capture_screen, self.capture.capture_active_screen
-        )
+        self.hotkeys.register(hotkeys.capture_screen, self.capture.capture_active_screen)
 
     # -- actions ----------------------------------------------------------
 
@@ -384,10 +391,46 @@ class AvatarApp:
     def _reset_claude(self) -> None:
         """Forget the conversation and every 'always allow' rule with it."""
         self.claude.reset()
+        self._conversation_id = None
         if self._ask_panel is not None:
+            self._ask_panel.set_context("")
             self._ask_panel.reset_answer()
             self._ask_panel.set_capture(None)
         self.notify("Claude", "Nouvelle discussion. Règles oubliées.")
+
+    def _record_answer(self, role: str, body: str) -> None:
+        """Store Claude's side of the turn, and the session id to resume it."""
+        self._answer_buffer = ""
+        if not self.config.history.enabled or self._conversation_id is None:
+            return
+        if body.strip():
+            self.history.add_message(self._conversation_id, role, body)
+        if self.claude.session_id:
+            self.history.set_session(self._conversation_id, self.claude.session_id)
+
+    def _open_history_window(self) -> None:
+        if self._history_window is None:
+            self._history_window = HistoryWindow(self.history)
+            self._protect(self._history_window)
+            self._history_window.resume_requested.connect(self._resume_conversation)
+        self._history_window.open_history()
+
+    def _resume_conversation(self, conversation_id: int) -> None:
+        """Pick an old conversation back up where it stopped."""
+        conversation = self.history.conversation(conversation_id)
+        if conversation is None or not conversation.sdk_session_id:
+            return
+        # Checked first: without a login the panel never opens, and resuming
+        # anyway would swap the live conversation for one nobody can see.
+        if not self.config.claude.enabled or not self._check_auth_once():
+            return
+        self.claude.resume(conversation.sdk_session_id)
+        self._conversation_id = conversation_id
+        self._open_ask(None)
+        if self._ask_panel is not None:
+            self._ask_panel.reset_answer()
+            self._ask_panel.set_context(self.history.export_markdown(conversation_id))
+            self._ask_panel.set_status("Discussion reprise")
 
     def _check_auth_once(self) -> bool:
         """Tell the user to log in *before* the SDK fails cryptically."""
@@ -401,9 +444,17 @@ class AvatarApp:
         return True
 
     def _on_asked(self, question: str, capture) -> None:
+        self._answer_buffer = ""
+        if self.config.history.enabled:
+            if self._conversation_id is None:
+                self._conversation_id = self.history.start("question")
+            self.history.add_message(
+                self._conversation_id, "user", question, _capture_info(capture)
+            )
         self.claude.ask(question, capture)
 
     def _on_claude_chunk(self, text: str) -> None:
+        self._answer_buffer += text
         if self._ask_panel is not None:
             self._ask_panel.append_answer(text)
 
@@ -412,14 +463,17 @@ class AvatarApp:
             self._ask_panel.set_status(line)
 
     def _on_claude_finished(self, status: str) -> None:
+        self._record_answer("assistant", self._answer_buffer)
         if self._ask_panel is not None:
             self._ask_panel.finish(status)
 
     def _on_claude_reset(self) -> None:
+        self._answer_buffer = ""
         if self._ask_panel is not None:
             self._ask_panel.reset_answer()
 
     def _on_claude_failed(self, message: str) -> None:
+        self._record_answer("error", message)
         if self._ask_panel is not None:
             self._ask_panel.show_error(message)
         self.notify("Claude", message, kind="warning")
@@ -454,6 +508,7 @@ class AvatarApp:
 
         request_id, request = self._approval_queue.popleft()
         self._approval_current = request_id
+        self._approval_request = request
         self._approval.ask(request, self.config.claude.permission_timeout_seconds)
 
     def _on_approval_decided(self, decision: str) -> None:
@@ -469,6 +524,18 @@ class AvatarApp:
             self.bridge.answer(request_id, "allow" if decision != "deny" else "deny")
         else:
             self.claude.answer_permission(request_id, decision)
+            # Only our own sessions go in our history; external ones have
+            # their own transcript in Claude Code.
+            request = self._approval_request
+            if (
+                self.config.history.enabled
+                and self._conversation_id is not None
+                and request is not None
+            ):
+                self.history.record_tool(
+                    self._conversation_id, request.tool, request.detail, decision
+                )
+        self._approval_request = None
         self._show_next_approval()
 
     # -- external sessions (hooks) ----------------------------------------
@@ -485,9 +552,7 @@ class AvatarApp:
             self.sessions.forget(event.session_id)
 
     def _on_bridge_decision(self, request_id: int, event) -> None:
-        self.sessions.record(
-            event.session_id, event.project, "waiting", describe(event)
-        )
+        self.sessions.record(event.session_id, event.project, "waiting", describe(event))
         self._bridge_requests.add(request_id)
         self._approval_queue.append(
             (
@@ -720,6 +785,11 @@ class AvatarApp:
             ("Nouvelle discussion Claude", self._reset_claude, "reset effacer"),
             ("Paramètres…", self._open_settings, "reglages options preferences"),
             (
+                "Historique des discussions",
+                self._open_history_window,
+                "anciennes conversations reprendre recherche",
+            ),
+            (
                 "Masquer / Afficher le sorcier",
                 self._toggle_avatar,
                 "cacher montrer avatar",
@@ -737,9 +807,7 @@ class AvatarApp:
             ),
         ]
         return [
-            Command(
-                title=title, kind="action", run=run, keywords=keywords, order=index
-            )
+            Command(title=title, kind="action", run=run, keywords=keywords, order=index)
             for index, (title, run, keywords) in enumerate(entries)
         ]
 
@@ -781,9 +849,7 @@ class AvatarApp:
         try:
             launch(entry)
         except LaunchError as exc:
-            self.notify(
-                f"Impossible de lancer {entry.label}", str(exc), kind="warning"
-            )
+            self.notify(f"Impossible de lancer {entry.label}", str(exc), kind="warning")
 
     def _toggle_avatar(self) -> None:
         visible = not self.avatar.isVisible()
@@ -838,9 +904,7 @@ class AvatarApp:
                 kind="warning",
             )
         elif reloaded:
-            self.notify(
-                "Configuration rechargée", "Tous les réglages ont été appliqués."
-            )
+            self.notify("Configuration rechargée", "Tous les réglages ont été appliqués.")
 
     def _report_rename(self) -> None:
         """Tell the user what the rename did, once, and only if it did something."""
@@ -868,6 +932,35 @@ class AvatarApp:
 def main(argv: list[str] | None = None) -> int:
     app = AvatarApp(list(argv if argv is not None else sys.argv))
     return app.run()
+
+
+def _capture_info(capture) -> CaptureInfo | None:
+    """A capture as the history keeps it: metadata and a small thumbnail.
+
+    Never the full image. A history of screenshots is a history of whatever
+    was on screen; 256 px is enough to recognise the conversation.
+    """
+    if capture is None:
+        return None
+    from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
+
+    small = capture.image.scaled(
+        256,
+        256,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    buffer = QBuffer()
+    buffer.setData(QByteArray())
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    small.save(buffer, "PNG")
+    return CaptureInfo(
+        capture.kind.value,
+        capture.label,
+        capture.width,
+        capture.height,
+        bytes(buffer.data()),
+    )
 
 
 def _one_line(body: str, limit: int = 90) -> str:

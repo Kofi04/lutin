@@ -23,6 +23,7 @@ __all__ = [
     "ClaudeSettings",
     "ClipboardSettings",
     "Config",
+    "HistorySettings",
     "Hotkeys",
     "LauncherEntry",
     "MonitorSettings",
@@ -84,6 +85,14 @@ class ClaudeSettings:
 
 
 @dataclass
+class HistorySettings:
+    # Keep every conversation with Claude, locally, in the SQLite database.
+    enabled: bool = True
+    # Drop unpinned conversations untouched for this many days. 0 keeps all.
+    retention_days: int = 0
+
+
+@dataclass
 class UiSettings:
     # Hide our opaque panels (answers, palette, approvals, settings) from
     # screen sharing and recording. The avatar and the overlay are translucent
@@ -118,6 +127,7 @@ class Config:
     clipboard: ClipboardSettings = field(default_factory=ClipboardSettings)
     claude: ClaudeSettings = field(default_factory=ClaudeSettings)
     ui: UiSettings = field(default_factory=UiSettings)
+    history: HistorySettings = field(default_factory=HistorySettings)
     launcher: list[LauncherEntry] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -200,9 +210,7 @@ def _load_launcher(raw: dict, warnings: list[str]) -> list[LauncherEntry]:
             raw_args = []
         working_dir = item.get("working_dir")
         if working_dir is not None and not isinstance(working_dir, str):
-            warnings.append(
-                f"launcher[{label}].working_dir : une chaîne était attendue"
-            )
+            warnings.append(f"launcher[{label}].working_dir : une chaîne était attendue")
             working_dir = None
         entries.append(
             LauncherEntry(
@@ -237,16 +245,16 @@ def load_config(path: Path | None = None) -> Config:
     _load_section(raw, "clipboard", config.clipboard, config.warnings)
     _load_section(raw, "claude", config.claude, config.warnings)
     _load_section(raw, "ui", config.ui, config.warnings)
+    _load_section(raw, "history", config.history, config.warnings)
     config.launcher = _load_launcher(raw, config.warnings)
 
     # Clamp the values where an out-of-range number would break the UI.
     config.appearance.scale = min(max(config.appearance.scale, 0.5), 4.0)
     config.appearance.opacity = min(max(config.appearance.opacity, 0.2), 1.0)
-    config.monitor.interval_seconds = min(
-        max(config.monitor.interval_seconds, 0.5), 60.0
-    )
+    config.monitor.interval_seconds = min(max(config.monitor.interval_seconds, 0.5), 60.0)
     config.clipboard.max_entries = min(max(config.clipboard.max_entries, 10), 5000)
     config.ui.overlay_seconds = min(max(config.ui.overlay_seconds, 2.0), 120.0)
+    config.history.retention_days = max(config.history.retention_days, 0)
     config.claude.permission_timeout_seconds = min(
         max(config.claude.permission_timeout_seconds, 5), 600
     )

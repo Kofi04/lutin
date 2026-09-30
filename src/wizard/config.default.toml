@@ -64,6 +64,15 @@ exclude_from_capture = true
 # Durée d'affichage d'une flèche ou d'une zone mise en évidence, en secondes.
 overlay_seconds = 12.0
 
+[history]
+# Garder vos discussions avec Claude, localement, pour les retrouver et les
+# reprendre (menu « Historique des discussions »). Seules des miniatures des
+# captures sont conservées, jamais l'image entière.
+enabled = true
+# Supprimer les discussions non épinglées inactives depuis ce nombre de
+# jours. 0 = tout garder.
+retention_days = 0
+
 [clipboard]
 enabled = true
 max_entries = 200        # les entrées plus anciennes sont purgées automatiquement

@@ -96,6 +96,8 @@ class AskPanel(QDialog):
 
         self._capture: Capture | None = None
         self._answer = ""
+        #: Earlier turns of a resumed conversation, shown above the answer.
+        self._context = ""
 
         self._pill = _ContextPill(self)
         self._pill.cleared.connect(self._clear_capture)
@@ -186,7 +188,7 @@ class AskPanel(QDialog):
             question = "Explique-moi ce que tu vois."
 
         self._answer = ""
-        self._view.setMarkdown("")
+        self._view.setMarkdown(self._shown())
         self._copy.setEnabled(False)
         self.set_busy(True)
         self.asked.emit(question, self._capture)
@@ -209,17 +211,31 @@ class AskPanel(QDialog):
         self._blocks.hide()
         self._view.show()
 
+    def set_context(self, markdown: str) -> None:
+        """Show earlier turns (a resumed conversation) above the answer."""
+        self._context = markdown
+        self._show_stream_view()
+        self._view.setMarkdown(self._shown())
+
+    def _shown(self) -> str:
+        """What the view displays: the context, then the current answer."""
+        if not self._context:
+            return self._answer
+        if not self._answer:
+            return self._context
+        return f"{self._context}\n\n---\n\n{self._answer}"
+
     def append_answer(self, chunk: str) -> None:
         self._show_stream_view()
         self._answer += chunk
-        self._view.setMarkdown(self._answer)
+        self._view.setMarkdown(self._shown())
         bar = self._view.verticalScrollBar()
         bar.setValue(bar.maximum())
 
     def reset_answer(self) -> None:
         """Throw away a partial answer (the turn failed mid-stream)."""
         self._answer = ""
-        self._view.setMarkdown("")
+        self._view.setMarkdown(self._shown())
         self._show_stream_view()
         self._copy.setEnabled(False)
 
@@ -233,7 +249,9 @@ class AskPanel(QDialog):
         self.set_busy(False)
         self._status.setText(status)
         self._copy.setEnabled(bool(self._answer))
-        blocks = split_blocks(self._answer)
+        # Copier copies only the answer, but the rendered view keeps the
+        # resumed context above it.
+        blocks = split_blocks(self._shown())
         if any(block.kind == "code" for block in blocks):
             self._render_blocks(blocks)
 

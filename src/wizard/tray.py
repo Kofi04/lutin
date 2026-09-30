@@ -79,6 +79,7 @@ class TrayIcon(QObject):
     reset_position_requested = Signal()
     reload_config_requested = Signal()
     settings_requested = Signal()
+    history_requested = Signal()
     open_config_folder_requested = Signal()
     autostart_toggled = Signal(bool)
     clipboard_capture_toggled = Signal(bool)
@@ -208,7 +209,9 @@ class TrayIcon(QObject):
 
         hotkeys = self._config.hotkeys
         self._add(
-            menu, "Demander à Claude…", self.ask_claude_requested,
+            menu,
+            "Demander à Claude…",
+            self.ask_claude_requested,
             hotkeys.ask_claude,
         )
         self._add(
@@ -218,9 +221,7 @@ class TrayIcon(QObject):
             hotkeys.capture_region,
         )
         self._add(menu, "Note rapide", self.quick_note_requested, hotkeys.quick_note)
-        self._add(
-            menu, "Presse-papiers", self.clipboard_requested, hotkeys.clipboard
-        )
+        self._add(menu, "Presse-papiers", self.clipboard_requested, hotkeys.clipboard)
         self._add(menu, "Notes", self.notes_requested)
         self._add(menu, "Me rappeler…", self.reminder_requested)
 
@@ -279,6 +280,9 @@ class TrayIcon(QObject):
             )
         menu.addAction("Nouvelle discussion Claude").triggered.connect(
             self.reset_claude_requested.emit
+        )
+        menu.addAction("Historique des discussions…").triggered.connect(
+            self.history_requested.emit
         )
         menu.addAction("Paramètres…").triggered.connect(self.settings_requested.emit)
         menu.addAction("Recharger la configuration").triggered.connect(
