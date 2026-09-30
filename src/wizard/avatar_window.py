@@ -115,6 +115,10 @@ class AvatarWindow(QWidget):
         """Drop back to the pose the mood asks for."""
         self._animator.release()
 
+    def set_connection(self, state: str) -> None:
+        """Reflect the link to Claude on the character (the staff carries it)."""
+        self._animator.set_connection(state)
+
     def set_microphone_level(self, level: float) -> None:
         """0..1, drives the staff pulse while he is listening."""
         self._animator.set_level(level)

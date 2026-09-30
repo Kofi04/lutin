@@ -101,7 +101,9 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
   be used. Plain drag still moves the avatar; `Ctrl`+drag is what points at a
   window, so neither gesture shadows the other.
 
-- **Claude** answers in the avatar, never in a terminal. Confirming a capture
+- **Claude** answers in the wizard, never in a terminal. The conversation is one
+  long-lived connection rather than a fresh CLI per question, so asking twice
+  costs one startup, not two. Confirming a capture
   opens the question panel; the answer streams back in place. The conversation
   persists (the SDK's `resume`) until *Nouvelle discussion Claude*.
 - **Approvals** appear on the avatar with Autoriser / Toujours / Refuser, for
@@ -140,6 +142,23 @@ claude auth login     # if not
 
 Little Wizard uses your existing subscription through the Agent SDK. There is no API
 key to obtain and nothing billed on top.
+
+**The connection opens at startup**, in the background, so the first question
+does not wait for it (`claude.prewarm`, on by default). The staff carries the
+result: lit in its usual colour when the link is up, a slow pale pulse while it
+is connecting, and drained grey when it is not. The tray tooltip and menu say
+why.
+
+> **A missing login does not announce itself at connection time.** The CLI
+> starts and the handshake succeeds; only the first real question comes back
+> with *"OAuth session expired and could not be refreshed"*. So the connection
+> state follows the first turn's verdict rather than the handshake's, and
+> Little Wizard shows you the `claude auth login` instruction instead of the raw
+> English error. It then stops retrying, because retrying cannot log anyone in —
+> asking again after you have logged in reconnects immediately.
+
+Other failures (a dropped pipe, a killed CLI) do retry, backing off 1, 2, 4 …
+up to 60 seconds.
 
 ## Configuration
 

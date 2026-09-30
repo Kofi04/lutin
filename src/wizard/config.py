@@ -76,6 +76,9 @@ class ClaudeSettings:
     # Read / Glob / Grep / WebFetch / WebSearch run without asking. They have no
     # side effects, but they do let Claude read any file you can read.
     auto_approve_read_only: bool = True
+    # Open the connection at startup so the first question is instant. It costs
+    # one idle CLI process for the life of the app.
+    prewarm: bool = True
 
 
 @dataclass

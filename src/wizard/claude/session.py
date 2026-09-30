@@ -33,6 +33,17 @@ READ_ONLY_TOOLS = ["Read", "Glob", "Grep", "WebFetch", "WebSearch"]
 
 _DENY_ON_TIMEOUT = "Aucune réponse de Little Wizard : action refusée par sécurité."
 
+#: Connection states, as plain strings so the UI never imports this module
+#: just to name one.
+OFFLINE = "offline"
+CONNECTING = "connecting"
+READY = "ready"
+
+#: Reconnect backoff, in seconds. Capped so a long outage settles into one
+#: attempt a minute rather than climbing forever.
+_BACKOFF_START = 1.0
+_BACKOFF_MAX = 60.0
+
 
 @dataclass(frozen=True)
 class AuthStatus:
@@ -106,12 +117,16 @@ class ClaudeSession(QObject):
     reset_answer = Signal()
     #: Claude wants to use a tool: (request_id, ToolRequest).
     permission_requested = Signal(int, object)
+    #: (state, detail) - OFFLINE / CONNECTING / READY, plus a reason when there
+    #: is one worth giving the user.
+    connection_changed = Signal(str, str)
 
     def __init__(
         self,
         permission_timeout: int = 110,
         allow_actions: bool = True,
         auto_approve_read_only: bool = True,
+        prewarm: bool = True,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -125,11 +140,98 @@ class ClaudeSession(QObject):
         self._always: set[str] = set()
         self._task: asyncio.Task | None = None
 
+        self._client = None  # ClaudeSDKClient, once connected
+        self._state = OFFLINE
+        self._connect_lock: asyncio.Lock | None = None
+        self._retry_at: float = 0.0
+        self._backoff = _BACKOFF_START
+        self._closing = False
+
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(
             target=self._run_loop, name="wizard-claude", daemon=True
         )
         self._thread.start()
+
+        if prewarm:
+            # Connecting spawns the Claude Code CLI and negotiates a session,
+            # which takes seconds. Doing it now, on the worker thread, is the
+            # whole point: the first question should not pay for it.
+            asyncio.run_coroutine_threadsafe(self._ensure_client(), self._loop)
+
+    # -- connection -------------------------------------------------------
+
+    @property
+    def state(self) -> str:
+        return self._state
+
+    def reconnect(self) -> None:
+        """Try again now, whatever the backoff says. Safe from the GUI thread."""
+        self._retry_at = 0.0
+        self._backoff = _BACKOFF_START
+        asyncio.run_coroutine_threadsafe(self._ensure_client(), self._loop)
+
+    def _set_state(self, state: str, detail: str = "") -> None:
+        if state == self._state:
+            return
+        self._state = state
+        self.connection_changed.emit(state, detail)
+
+    async def _ensure_client(self):
+        """Return a live client, connecting if needed. One attempt at a time."""
+        if self._closing:
+            return None
+        if self._client is not None:
+            return self._client
+
+        # The lock is built here rather than in __init__ because an asyncio.Lock
+        # binds to the running loop, and __init__ runs on the GUI thread.
+        if self._connect_lock is None:
+            self._connect_lock = asyncio.Lock()
+
+        async with self._connect_lock:
+            if self._client is not None or self._closing:
+                return self._client
+            if self._loop.time() < self._retry_at:
+                return None
+            return await self._connect()
+
+    async def _connect(self):
+        from claude_agent_sdk import ClaudeSDKClient
+
+        self._set_state(CONNECTING)
+        client = ClaudeSDKClient(options=self._options())
+        try:
+            await client.connect()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            await _quietly_disconnect(client)
+            self._note_failure(exc)
+            return None
+
+        self._client = client
+        self._backoff = _BACKOFF_START
+        self._retry_at = 0.0
+        self._set_state(READY)
+        return client
+
+    def _note_failure(self, exc: Exception) -> None:
+        detail = self._explain(exc)
+        if _is_auth_problem(exc):
+            # Retrying cannot fix a missing login, and each attempt spawns a
+            # CLI process. Wait for the user to act; asking a question also
+            # retries, so they are never stuck.
+            self._retry_at = float("inf")
+        else:
+            self._retry_at = self._loop.time() + self._backoff
+            self._backoff = min(self._backoff * 2, _BACKOFF_MAX)
+        self._set_state(OFFLINE, detail)
+
+    async def _drop_client(self) -> None:
+        client, self._client = self._client, None
+        if client is not None:
+            await _quietly_disconnect(client)
 
     # -- lifecycle --------------------------------------------------------
 
@@ -155,11 +257,13 @@ class ClaudeSession(QObject):
         and Python finalises them at interpreter exit, which prints a wall of
         "I/O operation on closed pipe".
         """
+        self._closing = True
         task = self._task
         if task is not None and not task.done():
             task.cancel()
             with contextlib.suppress(BaseException):
                 await task
+        await self._drop_client()
         await asyncio.sleep(0.15)
 
     @property
@@ -168,9 +272,22 @@ class ClaudeSession(QObject):
         return self._session_id
 
     def reset(self) -> None:
-        """Start a fresh conversation next time."""
+        """Start a fresh conversation.
+
+        The conversation lives inside the connected client, so a new one
+        means a new connection; clearing the id alone would keep talking to
+        the same session.
+        """
         self._session_id = None
         self._always.clear()
+        asyncio.run_coroutine_threadsafe(self._restart(), self._loop)
+
+    async def _restart(self) -> None:
+        await self._drop_client()
+        self._set_state(OFFLINE)
+        self._retry_at = 0.0
+        self._backoff = _BACKOFF_START
+        await self._ensure_client()
 
     # -- asking -----------------------------------------------------------
 
@@ -182,9 +299,25 @@ class ClaudeSession(QObject):
         asyncio.run_coroutine_threadsafe(self._start(question, capture), self._loop)
 
     def cancel(self) -> None:
+        """Stop the turn in flight, keeping the connection.
+
+        The client is long-lived now, so cancelling the task alone would
+        leave the CLI still working on the other side of the pipe. The SDK
+        interrupt is what actually stops it.
+        """
+        task = self._task
+        if task is None or task.done():
+            return
+        asyncio.run_coroutine_threadsafe(self._interrupt(), self._loop)
+
+    async def _interrupt(self) -> None:
+        client = self._client
+        if client is not None:
+            with contextlib.suppress(Exception):
+                await client.interrupt()
         task = self._task
         if task is not None and not task.done():
-            self._loop.call_soon_threadsafe(task.cancel)
+            task.cancel()
 
     async def _start(self, question: str, capture: Capture | None) -> None:
         self._task = asyncio.current_task()
@@ -193,16 +326,26 @@ class ClaudeSession(QObject):
         except asyncio.CancelledError:
             self.finished.emit("Interrompu.")
         except Exception as exc:  # the SDK raises a wide range of errors
+            # The pipe may be gone; keeping the client would fail every
+            # later question the same way, with no path back.
+            await self._drop_client()
+            self._set_state(OFFLINE, self._explain(exc))
             self.failed.emit(self._explain(exc))
 
     def _explain(self, exc: Exception) -> str:
         text = str(exc)
-        if "OAuth" in text or "authenticate" in text.lower():
-            return (
-                "Claude Code n'est pas connecté. Lance `claude auth login` "
-                "dans un terminal, puis réessaie."
-            )
+        if _is_auth_problem(exc):
+            return AUTH_HINT
         return text[:400]
+
+    def _offline_message(self) -> str:
+        """Why a question could not be sent, in the user's words."""
+        if self._retry_at == float("inf"):
+            return AUTH_HINT
+        return (
+            "Claude n'est pas joignable pour le moment. "
+            "Nouvelle tentative automatique dans quelques secondes."
+        )
 
     def _options(self):
         import warnings
@@ -221,6 +364,8 @@ class ClaudeSession(QObject):
         return ClaudeAgentOptions(
             allowed_tools=allowed,
             permission_mode="default",
+            # Only meaningful when we are reconnecting to a conversation
+            # that already existed; None starts a new one.
             resume=self._session_id,
             can_use_tool=self._can_use_tool if self._allow_actions else None,
             # Text arrives one content block at a time, which is progressive
@@ -269,14 +414,17 @@ class ClaudeSession(QObject):
             ResultMessage,
             TextBlock,
             ToolUseBlock,
-            query,
         )
+
+        client = await self._ensure_client()
+        if client is None:
+            self.failed.emit(self._offline_message())
+            return
 
         pending_text: list[str] = []
 
-        async for message in query(
-            prompt=self._prompt(question, capture), options=self._options()
-        ):
+        await client.query(self._prompt(question, capture))
+        async for message in client.receive_response():
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
@@ -293,7 +441,16 @@ class ClaudeSession(QObject):
                 if message.is_error:
                     # Wipe whatever the failed turn already streamed.
                     self.reset_answer.emit()
-                    self.failed.emit(self._explain_result(message))
+                    reason = self._explain_result(message)
+                    # Connecting succeeds even with no usable login: the CLI
+                    # starts and negotiates fine, and only the first real query
+                    # fails. Reporting "ready" after that would leave the staff
+                    # lit and the user guessing, so the turn's verdict, not the
+                    # handshake's, decides the state.
+                    if reason == AUTH_HINT:
+                        self._retry_at = float("inf")
+                        self._set_state(OFFLINE, reason)
+                    self.failed.emit(reason)
                     return
                 self.finished.emit(_cost_line(message))
 
@@ -354,6 +511,24 @@ class ClaudeSession(QObject):
 # ---------------------------------------------------------------------------
 # Describing tool calls for humans
 # ---------------------------------------------------------------------------
+
+
+AUTH_HINT = (
+    "Claude Code n'est pas connecté. Lance `claude auth login` "
+    "dans un terminal, puis réessaie."
+)
+
+
+def _is_auth_problem(exc: Exception) -> bool:
+    """Whether retrying could possibly help. A missing login it cannot."""
+    text = str(exc).lower()
+    return "oauth" in text or "authenticate" in text or "not logged in" in text
+
+
+async def _quietly_disconnect(client) -> None:
+    """Close a client we are giving up on. Failing to close is not news."""
+    with contextlib.suppress(Exception):
+        await client.disconnect()
 
 
 def _first_str(tool_input: dict, *keys: str) -> str:

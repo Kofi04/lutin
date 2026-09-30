@@ -31,6 +31,7 @@ from .bridge import HookServer
 from .bridge import installer as hooks_installer
 from .capture.controller import CaptureController
 from .claude import ClaudeSession, check_auth
+from .claude.session import OFFLINE
 from .config import (
     Config,
     config_dir,
@@ -103,12 +104,14 @@ class AvatarApp:
             permission_timeout=self.config.claude.permission_timeout_seconds,
             allow_actions=self.config.claude.allow_actions,
             auto_approve_read_only=self.config.claude.auto_approve_read_only,
+            prewarm=self.config.claude.enabled and self.config.claude.prewarm,
         )
         self._ask_panel: AskPanel | None = None
         self._approval: ApprovalCard | None = None
         self._approval_queue: deque = deque()
         self._approval_current: int | None = None
         self._auth_checked = False
+        self._reported_offline: set[str] = set()
 
         self.sessions = SessionRegistry()
         self.sessions.changed.connect(self._refresh_mood)
@@ -209,6 +212,7 @@ class AvatarApp:
         self.claude.failed.connect(self._on_claude_failed)
         self.claude.reset_answer.connect(self._on_claude_reset)
         self.claude.permission_requested.connect(self._on_permission_requested)
+        self.claude.connection_changed.connect(self._on_claude_connection)
 
         self.bridge.event.connect(self._on_hook_event)
         self.bridge.decision_requested.connect(self._on_bridge_decision)
@@ -342,6 +346,19 @@ class AvatarApp:
         self.tray.notify("Claude", message, warning=True)
 
     # -- approvals --------------------------------------------------------
+
+    def _on_claude_connection(self, state: str, detail: str) -> None:
+        """Reflect the link to Claude, without nagging about it.
+
+        Losing the connection is shown on the character and in the tray
+        tooltip. Only a problem the user can actually act on — a missing
+        login — is worth a notification, and only once.
+        """
+        self.avatar.set_connection(state)
+        self.tray.set_connection(state, detail)
+        if state == OFFLINE and detail and detail not in self._reported_offline:
+            self._reported_offline.add(detail)
+            self.tray.notify("Claude", detail, warning=True)
 
     def _on_permission_requested(self, request_id: int, request) -> None:
         self._approval_queue.append((request_id, request))

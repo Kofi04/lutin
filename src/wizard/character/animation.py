@@ -83,6 +83,11 @@ class Frame:
     #: Direction to point in, each axis in [-1, 1], when POINTING.
     aim: tuple[float, float] = (0.0, 0.0)
 
+    #: Link to Claude: "ready", "connecting" or "offline". Drawn as a small
+    #: mark on the staff rather than as a pose, because it is orthogonal to
+    #: what he is doing: you can be busy and offline at the same time.
+    connection: str = "ready"
+
     #: The contact shadow sells the float on the desktop. An app icon has
     #: nothing to float above, so the icon renderer turns it off.
     shadow: bool = True
@@ -127,6 +132,7 @@ class Animator:
         self._catching = False
         self._level = 0.0
         self._aim = (0.0, 0.0)
+        self._connection = "ready"
 
     # -- inputs -----------------------------------------------------------
 
@@ -180,6 +186,9 @@ class Animator:
     def set_aim(self, x: float, y: float) -> None:
         self._aim = (_clamp(x, -1.0, 1.0), _clamp(y, -1.0, 1.0))
 
+    def set_connection(self, state: str) -> None:
+        self._connection = state
+
     def notice_activity(self) -> None:
         """Something happened: reset the doze timer."""
         self._wake()
@@ -214,6 +223,7 @@ class Animator:
             catching=self._catching,
             level=self._level,
             aim=self._aim,
+            connection=self._connection,
         )
 
     # -- internals --------------------------------------------------------

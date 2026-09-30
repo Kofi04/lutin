@@ -93,6 +93,8 @@ class TrayIcon(QObject):
         self._autostart = False
         self._hooks_installed = False
         self._hooks_stale = False
+        self._connection = "ready"
+        self._connection_detail = ""
         self._capture_clipboard = config.clipboard.enabled
 
         self._icon = QSystemTrayIcon(mood_icon(Mood.CALM), self)
@@ -124,6 +126,26 @@ class TrayIcon(QObject):
     def set_hooks_installed(self, installed: bool, stale: bool = False) -> None:
         self._hooks_installed = installed
         self._hooks_stale = stale
+
+    def _refresh_tooltip(self) -> None:
+        lines = [APP_NAME, self._status_text]
+        note = self._connection_note()
+        if note:
+            lines.append(note)
+        self._icon.setToolTip("\n".join(line for line in lines if line))
+
+    def _connection_note(self) -> str:
+        if self._connection == "connecting":
+            return "Claude : connexion…"
+        if self._connection == "offline":
+            return f"Claude : hors ligne — {self._connection_detail}".rstrip(" —")
+        return ""
+
+    def set_connection(self, state: str, detail: str = "") -> None:
+        """Show the link to Claude in the tooltip and the menu."""
+        self._connection = state
+        self._connection_detail = detail
+        self._refresh_tooltip()
 
     def set_clipboard_capture(self, enabled: bool) -> None:
         self._capture_clipboard = enabled
@@ -175,6 +197,12 @@ class TrayIcon(QObject):
 
         status = menu.addAction(self._status_text)
         status.setEnabled(False)
+        note = self._connection_note()
+        if note:
+            # Only shown when there is something to say: a healthy connection
+            # does not need a line in the menu.
+            offline = menu.addAction(note)
+            offline.setEnabled(False)
         menu.addSeparator()
 
         hotkeys = self._config.hotkeys

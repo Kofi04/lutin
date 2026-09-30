@@ -835,6 +835,12 @@ def _glow_pixmap(halo: QColor) -> QPixmap:
 def _draw_orb(
     painter: QPainter, frame: Frame, top: QPointF, glow: QColor, halo: QColor
 ) -> None:
+    if frame.connection != "ready":
+        # The light is the link to Claude as well as the mood. Draining its
+        # colour is a quieter way to say "not connected" than a second badge,
+        # and it cannot be confused with a mood: no mood is grey.
+        glow, halo = _connection_colours(frame)
+
     pulse = _orb_pulse(frame)
     radius = 3.3 + 0.7 * pulse
 
@@ -861,8 +867,20 @@ def _draw_orb(
     )
 
 
+def _connection_colours(frame: Frame) -> tuple[QColor, QColor]:
+    """A draining light while connecting, a dead grey one when offline."""
+    if frame.connection == "connecting":
+        return QColor("#C9C2AE"), QColor("#8C8674")
+    return QColor("#7E8496"), QColor("#565C6E")
+
+
 def _orb_pulse(frame: Frame) -> float:
     """0..1. What the light is doing tells you what the app is doing."""
+    if frame.connection == "connecting":
+        # A slow breath, so "trying" is visibly different from "given up".
+        return 0.2 + 0.8 * abs(math.sin(frame.total_time * 2.2))
+    if frame.connection == "offline":
+        return 0.0
     if frame.emote is Emote.LISTENING:
         # Follows your voice, so you can see that the microphone is live.
         return 0.25 + 0.75 * frame.level

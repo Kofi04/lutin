@@ -22,6 +22,8 @@ guidage visuel à l'écran, voix et dictée, mode Live, historique des discussio
 | Moteur vocal | **Le plus léger** : reconnaissance/synthèse Windows via `winrt` (~5 Mo), pas de modèle à télécharger |
 | Mode Live | **Micro + audio système** (loopback WASAPI), avec indicateur d'enregistrement permanent |
 | Rappels persistants | **Non** — ils restent en mémoire, comme aujourd'hui |
+| Personnage | **On garde le dessin par code** (phase 1). Les PNG restent ajoutables à tout moment via `assets/character/`, sans modification de code |
+| Dossier du dépôt | **Reste `desktop-avatar`** — abandonné définitivement, VS Code le tient ouvert et l'incohérence de nom n'a aucune conséquence technique |
 | Masquer l'app des captures | **Oui par défaut** (`ui.exclude_from_capture = true`) |
 | Capture d'écran jointe aux questions vocales | **Oui par défaut**, avec indicateur visible |
 | Réponses parlées (TTS) | **Oui par défaut** (le brief disait l'inverse ; l'utilisateur a tranché) |
@@ -204,9 +206,8 @@ les conflits.
 - `paths.py` : migration au premier lancement — `%APPDATA%\Lutin` →
   `%APPDATA%\LittleWizard` (config, base, `state.ini`), et l'ancienne valeur `Run` du
   registre retirée si elle existe. Idempotent, testé.
-- Dossier du dépôt `desktop-avatar` → `little-wizard`, venv recréé (il doit l'être de
-  toute façon pour les nouveaux extras : les `.exe` de `Scripts` embarquent des
-  chemins absolus).
+- ~~Dossier du dépôt renommé~~ — **abandonné** : VS Code tient le dossier ouvert et
+  Windows refuse de le renommer. Sans conséquence technique.
 
 **Vérification** : `pytest` vert après renommage ; l'app démarre ; une installation de
 hooks faite sous « Lutin » se désinstalle proprement.

@@ -43,6 +43,10 @@ permission_timeout_seconds = 110
 # étant validée par vous dans le sorcier. Mettez false pour qu'il se contente
 # de répondre.
 allow_actions = true
+# Ouvrir la connexion à Claude dès le lancement, en arrière-plan, pour que la
+# première question soit immédiate. Mettez false si vous préférez que rien ne
+# démarre tant que vous ne posez pas de question.
+prewarm = true
 # Read / Glob / Grep / WebFetch / WebSearch passent sans demander. Ces outils
 # ne modifient rien, mais ils laissent Claude lire tous vos fichiers lisibles.
 auto_approve_read_only = true
