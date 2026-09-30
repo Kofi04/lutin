@@ -18,12 +18,15 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
 from .capture import Capture
+from .markdown_blocks import Block, highlight, language_label, split_blocks
 from .ui import _centre_on_cursor
 
 _PILL_HEIGHT = 44
@@ -109,6 +112,17 @@ class AskPanel(QDialog):
         self._view.setOpenExternalLinks(True)
         self._view.setPlaceholderText("La réponse de Claude apparaîtra ici.")
 
+        # Two views of one answer. While it streams, a single QTextBrowser
+        # keeps up with the text cheaply. Once it is complete, any answer
+        # with code is re-rendered as separate blocks, so each code block
+        # can be highlighted and get its own Copy button — rebuilding
+        # widgets on every streamed chunk would flicker and cost far more.
+        self._blocks = QScrollArea(self)
+        self._blocks.setWidgetResizable(True)
+        self._blocks.setFrameShape(QFrame.Shape.NoFrame)
+        self._blocks.hide()
+        self._dark = True
+
         self._send = QPushButton("Demander", self)
         self._send.setDefault(True)
         self._send.clicked.connect(self._submit)
@@ -135,6 +149,7 @@ class AskPanel(QDialog):
         layout.addWidget(self._pill)
         layout.addWidget(self._question)
         layout.addWidget(self._view, 1)
+        layout.addWidget(self._blocks, 1)
         layout.addLayout(actions)
 
         QShortcut(QKeySequence("Ctrl+Return"), self, self._submit)
@@ -186,7 +201,16 @@ class AskPanel(QDialog):
     def set_status(self, text: str) -> None:
         self._status.setText(text)
 
+    def set_dark(self, dark: bool) -> None:
+        """Which highlighting palette to use for code blocks."""
+        self._dark = dark
+
+    def _show_stream_view(self) -> None:
+        self._blocks.hide()
+        self._view.show()
+
     def append_answer(self, chunk: str) -> None:
+        self._show_stream_view()
         self._answer += chunk
         self._view.setMarkdown(self._answer)
         bar = self._view.verticalScrollBar()
@@ -196,6 +220,7 @@ class AskPanel(QDialog):
         """Throw away a partial answer (the turn failed mid-stream)."""
         self._answer = ""
         self._view.setMarkdown("")
+        self._show_stream_view()
         self._copy.setEnabled(False)
 
     def show_error(self, message: str) -> None:
@@ -208,12 +233,114 @@ class AskPanel(QDialog):
         self.set_busy(False)
         self._status.setText(status)
         self._copy.setEnabled(bool(self._answer))
+        blocks = split_blocks(self._answer)
+        if any(block.kind == "code" for block in blocks):
+            self._render_blocks(blocks)
+
+    def _render_blocks(self, blocks: list[Block]) -> None:
+        page = QWidget()
+        column = QVBoxLayout(page)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(10)
+        for block in blocks:
+            if block.kind == "code":
+                column.addWidget(CodeBlock(block, self._dark, page))
+            else:
+                prose = _AutoHeightBrowser(page)
+                prose.setOpenExternalLinks(True)
+                prose.setMarkdown(block.body)
+                column.addWidget(prose)
+        column.addStretch(1)
+        self._blocks.setWidget(page)
+        self._view.hide()
+        self._blocks.show()
 
     def _copy_answer(self) -> None:
         from PySide6.QtGui import QGuiApplication
 
         QGuiApplication.clipboard().setText(self._answer)
         self._status.setText("Copié")
+
+
+class CodeBlock(QFrame):
+    """One highlighted code block with its own Copy button."""
+
+    def __init__(self, block: Block, dark: bool, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("card")
+        self._code = block.body
+
+        name = QLabel(language_label(block.language), self)
+        name.setObjectName("caption")
+        self._button = QPushButton("Copier", self)
+        self._button.setObjectName("quiet")
+        self._button.clicked.connect(self._copy)
+
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        head.addWidget(name, 1)
+        head.addWidget(self._button)
+
+        body = _AutoHeightBrowser(self, cap=420)
+        # Code keeps its own line breaks: wrapping it would lie about
+        # indentation, which in Python is the syntax.
+        body.setLineWrapMode(QTextBrowser.LineWrapMode.NoWrap)
+        body.setHtml(highlight(block.body, block.language, dark))
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 8, 8, 10)
+        layout.setSpacing(4)
+        layout.addLayout(head)
+        layout.addWidget(body)
+
+    @property
+    def code(self) -> str:
+        return self._code
+
+    def _copy(self) -> None:
+        from PySide6.QtGui import QGuiApplication
+
+        QGuiApplication.clipboard().setText(self._code)
+        self._button.setText("Copié")
+        QTimer.singleShot(1400, lambda: self._button.setText("Copier"))
+
+
+class _AutoHeightBrowser(QTextBrowser):
+    """A text view exactly as tall as its content, at whatever width it gets.
+
+    Measuring once at construction does not work: the widget has no real
+    width yet, so the text wraps at a guessed width and the height comes out
+    wrong — three lines of prose ended up in a box sized for ten. Measuring
+    on every resize is the only way the number stays true.
+    """
+
+    def __init__(self, parent: QWidget | None = None, cap: int = 520) -> None:
+        super().__init__(parent)
+        self._cap = cap
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.document().contentsChanged.connect(self._refit)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._refit()
+
+    def _refit(self) -> None:
+        width = self.viewport().width()
+        if width <= 0:
+            return
+        document = self.document()
+        document.setTextWidth(width)
+        margins = self.contentsMargins()
+        height = int(document.size().height()) + margins.top() + margins.bottom() + 4
+        # Very long code scrolls inside its own block rather than making the
+        # answer a mile long.
+        if height > self._cap:
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            height = self._cap
+        if self.height() != height:
+            self.setFixedHeight(height)
 
 
 class ApprovalCard(QDialog):

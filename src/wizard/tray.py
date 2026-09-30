@@ -78,6 +78,7 @@ class TrayIcon(QObject):
     snap_requested = Signal()
     reset_position_requested = Signal()
     reload_config_requested = Signal()
+    settings_requested = Signal()
     open_config_folder_requested = Signal()
     autostart_toggled = Signal(bool)
     clipboard_capture_toggled = Signal(bool)
@@ -279,6 +280,7 @@ class TrayIcon(QObject):
         menu.addAction("Nouvelle discussion Claude").triggered.connect(
             self.reset_claude_requested.emit
         )
+        menu.addAction("Paramètres…").triggered.connect(self.settings_requested.emit)
         menu.addAction("Recharger la configuration").triggered.connect(
             self.reload_config_requested.emit
         )

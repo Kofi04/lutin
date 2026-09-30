@@ -30,6 +30,7 @@ from .branding import (
 from .bridge import HookServer
 from .bridge import installer as hooks_installer
 from .capture.controller import CaptureController
+from .character.emote import Emote
 from .claude import ClaudeSession, check_auth
 from .claude.session import OFFLINE
 from .config import (
@@ -54,7 +55,9 @@ from .ui import HistoryPanel, QuickNoteDialog, ReminderDialog
 from .ui_capture import CapturePreview
 from .ui_claude import ApprovalCard, AskPanel, ToolRequest
 from .ui_hooks import HookDiffDialog, summarise_backup
+from .ui_onboarding import Check, OnboardingDialog, already_shown, mark_shown
 from .ui_palette import Command, CommandPalette
+from .ui_settings import SettingsWindow
 from .ui_toast import ToastManager
 
 
@@ -136,6 +139,7 @@ class AvatarApp:
         self._bridge_requests: set[int] = set()
 
         self._palette: CommandPalette | None = None
+        self._settings: SettingsWindow | None = None
         self._note_dialog: QuickNoteDialog | None = None
         self._history: HistoryPanel | None = None
         self._reminder_dialog: ReminderDialog | None = None
@@ -185,6 +189,13 @@ class AvatarApp:
         self.monitor.start()
 
         self._report_startup_problems()
+        if not already_shown():
+            # Deferred so the avatar is on screen first: the welcome points
+            # at him, and he should be there to be pointed at.
+            from PySide6.QtCore import QTimer
+
+            QTimer.singleShot(600, self._show_onboarding)
+        self.avatar.play_emote(Emote.GREETING)
         return self.qt.exec()
 
     def shutdown(self) -> None:
@@ -203,6 +214,8 @@ class AvatarApp:
         """Restyle everything at once, including windows already open."""
         self.qt.setStyleSheet(stylesheet(theme))
         self.toasts.set_theme(theme)
+        if getattr(self, "_ask_panel", None) is not None:
+            self._ask_panel.set_dark(theme.dark)
 
     def _connect(self) -> None:
         self.monitor.sampled.connect(self._on_sample)
@@ -256,6 +269,7 @@ class AvatarApp:
         self.tray.clipboard_capture_toggled.connect(self.clipboard.set_enabled)
         self.tray.autostart_toggled.connect(self._set_autostart)
         self.tray.reload_config_requested.connect(self.reload_config)
+        self.tray.settings_requested.connect(self._open_settings)
         self.tray.open_config_folder_requested.connect(self._open_config_folder)
         self.tray.quit_requested.connect(self.shutdown)
 
@@ -339,6 +353,7 @@ class AvatarApp:
 
         if self._ask_panel is None:
             self._ask_panel = AskPanel()
+            self._ask_panel.set_dark(self.theme.theme.dark)
             self._ask_panel.asked.connect(self._on_asked)
             self._ask_panel.interrupted.connect(self.claude.cancel)
         self._ask_panel.open_with(capture)
@@ -519,6 +534,52 @@ class AvatarApp:
         # rather than off the bottom of the screen.
         self.tray.popup_menu(self.avatar.mapToGlobal(self.avatar.rect().topLeft()))
 
+    def _show_onboarding(self) -> None:
+        dialog = OnboardingDialog(self.config.hotkeys, self._setup_checks())
+        dialog.install_hooks_requested.connect(lambda: self._manage_hooks(True))
+        dialog.open_settings_requested.connect(self._open_settings)
+        dialog.exec()
+        # Marked after, not before: a crash mid-welcome should show it again.
+        mark_shown()
+
+    def _setup_checks(self) -> list[Check]:
+        """What is and is not ready on this machine, checked, not assumed."""
+        auth = check_auth()
+        hooks = hooks_installer.is_installed()
+        return [
+            Check(
+                "Claude Code",
+                auth.logged_in,
+                "Connecté : vous pouvez me poser des questions."
+                if auth.logged_in
+                else "Pas connecté. Lancez <code>claude auth login</code> dans un "
+                "terminal, puis revenez.",
+            ),
+            Check(
+                "Vos sessions Claude Code",
+                hooks,
+                "Je les vois et vous pouvez approuver leurs actions ici."
+                if hooks
+                else "Pas encore reliées. Rien n'est modifié sans que vous voyiez "
+                "le changement exact avant.",
+                action="" if hooks else "Installer…",
+            ),
+            Check(
+                "Icône de notification",
+                True,
+                "Sous Windows 10, elle se range derrière la flèche <b>^</b> près "
+                "de l'horloge. Glissez-la sur la barre pour la garder visible.",
+            ),
+        ]
+
+    def _open_settings(self) -> None:
+        if self._settings is None:
+            self._settings = SettingsWindow()
+            # Saving writes the file; reloading is what makes it take effect,
+            # hotkeys included, without a restart.
+            self._settings.saved.connect(self.reload_config)
+        self._settings.open_settings()
+
     def _open_palette(self) -> None:
         """One field over everything: actions, launchers, notes, clipboard."""
         if self._palette is None:
@@ -553,6 +614,7 @@ class AvatarApp:
             ),
             ("Me rappeler…", self._open_reminder, "minuteur timer pomodoro"),
             ("Nouvelle discussion Claude", self._reset_claude, "reset effacer"),
+            ("Paramètres…", self._open_settings, "reglages options preferences"),
             (
                 "Masquer / Afficher le sorcier",
                 self._toggle_avatar,

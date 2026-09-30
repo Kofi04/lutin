@@ -262,6 +262,46 @@ files and had drifted; now nothing outside that package names a colour.
   game, a video or a presentation is running. He comes back afterwards, unless
   you had hidden him yourself first.
 
+### Settings, and why they do not wreck your config
+
+*Paramètres…* (tray menu or command palette) is a window over `config.toml`,
+which stays the source of truth. It writes **only the keys you changed, one
+line at a time**, so two things survive a save that a normal TOML serialiser
+would destroy:
+
+- **The French comments** explaining each setting. A round-trip through a
+  TOML library drops every one of them; `config_writer.py` replaces just the
+  value and keeps the comment in its column.
+- **A hand edit made while the window was open.** Writing a full snapshot
+  would silently revert it. Writing only what changed does not.
+
+Shortcuts are captured live — click the field, press the combination — and
+checked for conflicts before saving, by what they *mean* rather than how they
+are spelt: `ctrl+alt+n`, `Control+Alt+N` and `alt+ctrl+n` are one shortcut, and
+a text comparison would let you register the second one, which would then
+silently never fire. Shift on its own is refused as a modifier, since
+`shift+A` would swallow every capital A you type anywhere.
+
+### Answers with code
+
+While an answer streams it is one plain view, which keeps up cheaply. Once it
+is complete, an answer containing code is re-rendered as separate blocks: prose
+through Qt's Markdown, each code block highlighted (Pygments, with a palette
+matched to the theme) and given **its own Copier button**. Rebuilding widgets
+on every streamed chunk would flicker and cost far more. Code keeps its own
+line breaks and scrolls sideways when long: wrapping would misrepresent
+indentation, which in Python is the syntax.
+
+### First run
+
+A welcome screen, shown once, introduces him, lists the shortcuts worth
+learning, and **checks this machine** rather than promising: whether Claude
+Code is logged in, whether the hooks are installed (with a button to do it),
+and where Windows 10 hides the tray icon. It stays on top, because at logon
+with autostart the app is a background process, and Windows would otherwise
+open it behind whatever you had in front — where it was, until that was
+caught by checking which window was actually painted at its centre.
+
 ## The character
 
 Little Wizard is a small African wizard: dark skin, big round eyes, an indigo
@@ -356,6 +396,11 @@ src/wizard/
   fuzzy.py          subsequence ranking for the command palette
   ui_palette.py     the command palette
   ui_toast.py       in-app notifications
+  ui_settings.py    the settings window
+  ui_onboarding.py  the first-run screen
+  config_writer.py  edits config.toml one line at a time, keeping comments
+  hotkey_spec.py    capturing a shortcut, and finding two that collide
+  markdown_blocks.py  splitting an answer into prose and highlighted code
   avatar_window.py  the frameless translucent always-on-top window
   hotkeys.py        RegisterHotKey bridged into Qt via a native event filter
   tray.py           tray icon and menu
