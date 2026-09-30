@@ -40,6 +40,7 @@ from .ui import _centre_on_cursor
 HOTKEY_LABELS: dict[str, str] = {
     "ask_claude": "Demander à Claude",
     "capture_region": "Montrer une zone",
+    "capture_screen": "Montrer tout l'écran",
     "launcher": "Palette de commandes",
     "quick_note": "Note rapide",
     "clipboard": "Presse-papiers",
@@ -281,6 +282,17 @@ class SettingsWindow(QDialog):
         entries.setRange(10, 5000)
         entries.setValue(config.clipboard.max_entries)
         self._add(form, "Entrées conservées", _Field("clipboard", "max_entries", entries))
+
+        hidden = QCheckBox("Cacher mes panneaux des partages d'écran")
+        hidden.setChecked(config.ui.exclude_from_capture)
+        self._add(
+            form,
+            "",
+            _Field("ui", "exclude_from_capture", hidden),
+            "Les réponses et la palette restent visibles pour vous, pas pour "
+            "ceux qui voient votre écran. Le sorcier lui-même reste visible : "
+            "Windows ne permet pas de cacher une fenêtre transparente.",
+        )
 
         monitor = QCheckBox("Refléter la charge de la machine dans son humeur")
         monitor.setChecked(config.monitor.enabled)

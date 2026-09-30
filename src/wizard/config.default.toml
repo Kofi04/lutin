@@ -22,6 +22,7 @@ launcher = "ctrl+alt+Space"
 toggle_avatar = "ctrl+alt+A"
 capture_region = "ctrl+alt+S"   # sélectionner une zone de l'écran à montrer
 ask_claude = "ctrl+alt+C"       # ouvrir la discussion avec Claude
+capture_screen = "ctrl+alt+E"   # montrer tout l'écran actif, sans sélection
 
 # Pour montrer une fenêtre entière : Ctrl + glisser le sorcier dessus.
 # Pour montrer une image : la déposer sur le sorcier.
@@ -50,6 +51,18 @@ prewarm = true
 # Read / Glob / Grep / WebFetch / WebSearch passent sans demander. Ces outils
 # ne modifient rien, mais ils laissent Claude lire tous vos fichiers lisibles.
 auto_approve_read_only = true
+
+[ui]
+# Cacher les panneaux de Little Wizard (réponses, palette, autorisations,
+# paramètres) des partages d'écran et des enregistrements : vous les voyez,
+# pas ceux qui regardent votre écran dans Teams, Zoom ou OBS.
+# Le sorcier lui-même et les flèches à l'écran ne peuvent PAS être cachés
+# ainsi (Windows le refuse sur les fenêtres transparentes) : ils restent
+# visibles dans vos partages. Ils sont en revanche toujours retirés des
+# captures que Little Wizard envoie à Claude, quel que soit ce réglage.
+exclude_from_capture = true
+# Durée d'affichage d'une flèche ou d'une zone mise en évidence, en secondes.
+overlay_seconds = 12.0
 
 [clipboard]
 enabled = true

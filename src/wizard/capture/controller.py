@@ -12,8 +12,9 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRect, Signal
 from PySide6.QtGui import QImage
 
+from .cloak import Cloak
 from .prepare import CaptureKind, prepare
-from .region import RegionSelector
+from .region import RegionSelector, grab_rect
 from .window import (
     WindowHighlight,
     capture_window,
@@ -38,7 +39,10 @@ class CaptureController(QObject):
         super().__init__(parent)
 
         self._selector = RegionSelector(self)
-        self._selector.captured.connect(self._on_region)
+        self._selector.selected.connect(self._on_region_selected)
+        # Every grab goes through this: our windows out of the way, a moment
+        # for the screen to repaint, then the grab.
+        self._cloak = Cloak()
 
         self._halo = WindowHighlight()
         self._ignored_hwnds: set[int] = set()
@@ -52,15 +56,57 @@ class CaptureController(QObject):
         if handle:
             self._ignored_hwnds.add(handle)
 
+    def hide_during_capture(self, widget) -> None:
+        """Keep one of our windows out of the screenshots we take."""
+        self._cloak.add(widget)
+
     # -- region -----------------------------------------------------------
 
     def start_region(self) -> None:
         if not self._selector.active:
             self._selector.start()
 
-    def _on_region(self, image: QImage, rect: QRect) -> None:
+    def _on_region_selected(self, rect: QRect) -> None:
+        self._cloak.around(lambda: self._grab_region(rect))
+
+    def _grab_region(self, rect: QRect) -> None:
+        image = grab_rect(rect)
+        if image is None or image.isNull():
+            self.failed.emit("Impossible de capturer cette zone.")
+            return
         self._emit(
-            image, CaptureKind.REGION, f"Zone {rect.width()}×{rect.height()}"
+            image,
+            CaptureKind.REGION,
+            f"Zone {rect.width()}×{rect.height()}",
+            _region_of(rect),
+        )
+
+    # -- the whole screen -------------------------------------------------
+
+    def capture_active_screen(self) -> None:
+        """Grab the monitor under the cursor, no selection needed."""
+        from PySide6.QtGui import QCursor, QGuiApplication
+
+        screen = (
+            QGuiApplication.screenAt(QCursor.pos())
+            or QGuiApplication.primaryScreen()
+        )
+        if screen is None:
+            self.failed.emit("Aucun écran disponible.")
+            return
+        rect = screen.geometry()
+        self._cloak.around(lambda: self._grab_screen(rect))
+
+    def _grab_screen(self, rect: QRect) -> None:
+        image = grab_rect(rect)
+        if image is None or image.isNull():
+            self.failed.emit("Impossible de capturer l'écran.")
+            return
+        self._emit(
+            image,
+            CaptureKind.SCREEN,
+            f"Écran {rect.width()}×{rect.height()}",
+            _region_of(rect),
         )
 
     # -- window -----------------------------------------------------------
@@ -92,11 +138,15 @@ class CaptureController(QObject):
             self.failed.emit("Aucune fenêtre sous le curseur.")
             return
 
+        rect = physical_to_logical(info.left, info.top, info.right, info.bottom)
+        self._cloak.around(lambda: self._grab_window(info, rect))
+
+    def _grab_window(self, info, rect: QRect) -> None:
         image = capture_window(info)
         if image is None or image.isNull():
             self.failed.emit(f"Impossible de capturer {info.process or 'la fenêtre'}.")
             return
-        self._emit(image, CaptureKind.WINDOW, info.label())
+        self._emit(image, CaptureKind.WINDOW, info.label(), _region_of(rect))
 
     # -- files ------------------------------------------------------------
 
@@ -118,10 +168,23 @@ class CaptureController(QObject):
 
     # -- shared -----------------------------------------------------------
 
-    def _emit(self, image: QImage, kind: CaptureKind, label: str) -> None:
+    def _emit(
+        self,
+        image: QImage,
+        kind: CaptureKind,
+        label: str,
+        region: tuple[float, float, float, float] | None = None,
+    ) -> None:
         try:
-            capture = prepare(image, kind, label)
+            capture = prepare(image, kind, label, region=region)
         except (ValueError, RuntimeError) as exc:
             self.failed.emit(str(exc))
             return
         self.captured.emit(capture)
+
+
+def _region_of(rect: QRect) -> tuple[float, float, float, float]:
+    """A logical QRect as the plain tuple the mapping layer works in."""
+    return (
+        float(rect.x()), float(rect.y()), float(rect.width()), float(rect.height())
+    )

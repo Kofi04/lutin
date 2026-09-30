@@ -13,6 +13,8 @@ from enum import Enum
 from PySide6.QtCore import QBuffer, QByteArray, Qt
 from PySide6.QtGui import QImage
 
+from ..overlay.mapping import CaptureFrame
+
 #: Claude downsamples images whose long edge exceeds this, so sending anything
 #: bigger costs upload time and tokens for detail that is thrown away anyway.
 MAX_EDGE = 1568
@@ -60,6 +62,10 @@ class Capture:
     label: str  # shown in the context pill, e.g. "Chrome - Gmail"
     image: QImage  # already downscaled
     png: bytes  # encoded once, reused for the preview and the request
+    #: Where on the desktop the image came from, so Claude's coordinates can
+    #: be mapped back onto the screen. None for a dropped file, which has no
+    #: place on the screen to point at.
+    frame: CaptureFrame | None = None
 
     @property
     def width(self) -> int:
@@ -98,6 +104,7 @@ def prepare(
     kind: CaptureKind,
     label: str,
     max_edge: int = MAX_EDGE,
+    region: tuple[float, float, float, float] | None = None,
 ) -> Capture:
     """Downscale, encode and wrap a grabbed image."""
     if image.isNull():
@@ -117,4 +124,15 @@ def prepare(
     if image.hasAlphaChannel():
         image = image.convertToFormat(QImage.Format.Format_RGB888)
 
-    return Capture(kind=kind, label=label, image=image, png=_encode_png(image))
+    # Recorded *after* downscaling, against the image actually sent: that is
+    # the one size Claude's coordinates are expressed in.
+    frame = None
+    if region is not None:
+        left, top, width, height = region
+        frame = CaptureFrame(
+            left, top, width, height, image.width(), image.height()
+        )
+
+    return Capture(
+        kind=kind, label=label, image=image, png=_encode_png(image), frame=frame
+    )

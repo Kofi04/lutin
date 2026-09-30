@@ -123,3 +123,52 @@ def test_summary_mentions_size_and_cost():
 def test_prepare_rejects_an_empty_image():
     with pytest.raises(ValueError):
         prepare(QImage(), CaptureKind.REGION, "Zone")
+
+
+# -- the frame, so Claude's coordinates can be mapped back ------------------
+
+
+def test_a_screen_capture_records_where_it_came_from():
+    from wizard.capture.prepare import prepare
+
+    # 3136 logical pixels wide, from a monitor left of the primary.
+    capture = prepare(
+        image(3136, 1764, "#336699"),
+        CaptureKind.REGION,
+        "Zone",
+        region=(-3136.0, 0.0, 3136.0, 1764.0),
+    )
+
+    assert capture.frame is not None
+    assert (capture.frame.left, capture.frame.top) == (-3136.0, 0.0)
+    # Recorded against the image as *sent*, after downscaling: that is the
+    # only size Claude's coordinates can be in.
+    assert (capture.frame.image_width, capture.frame.image_height) == (
+        capture.width,
+        capture.height,
+    )
+    assert capture.width == MAX_EDGE
+
+
+def test_a_dropped_file_has_no_frame():
+    from wizard.capture.prepare import prepare
+
+    capture = prepare(image(200, 100, "#FFFFFF"), CaptureKind.FILE, "photo.png")
+
+    # There is nowhere on the screen to point at.
+    assert capture.frame is None
+
+
+def test_a_capture_frame_maps_the_centre_back_to_the_region():
+    from wizard.capture.prepare import prepare
+    from wizard.overlay.mapping import image_to_logical
+
+    capture = prepare(
+        image(2000, 1000, "#000000"),
+        CaptureKind.WINDOW,
+        "Fenêtre",
+        region=(100.0, 50.0, 2000.0, 1000.0),
+    )
+    centre = image_to_logical(capture.frame, capture.width / 2, capture.height / 2)
+
+    assert (centre.x, centre.y) == (1100.0, 550.0)

@@ -72,6 +72,7 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
 |---|---|---|
 | Ask Claude | `Ctrl+Alt+C` | *Demander à Claude…* |
 | Show a screen region | `Ctrl+Alt+S` | *Montrer une zone…* |
+| Show the whole active screen | `Ctrl+Alt+E` | — |
 | Show a window | `Ctrl`+drag the avatar onto it | — |
 | Show an image | drop the file on the avatar | — |
 | Quick note | `Ctrl+Alt+N` | *Note rapide* |
@@ -231,6 +232,60 @@ The suite covers the logic that is worth protecting and does not need a
 display: config parsing and clamping, SQLite behaviour (dedup, pruning, LIKE
 escaping), the mood thresholds, the hotkey/duration parsers, image sizing,
 the hook framing and settings.json surgery, and the rename migration.
+
+## On-screen guidance
+
+Claude can *show* things on your screen, not only describe them: an arrow at a
+button, a highlighted area with the rest of the screen dimmed, or a step-by-step
+walkthrough with *Précédent / Suivant*. It does this through four tools —
+`point_at`, `highlight`, `show_steps`, `clear_overlay` — served in-process by an
+SDK MCP server and pre-approved, since drawing an arrow cannot change anything.
+When Claude points, the wizard walks over and stands beside the spot, staff
+aimed at it, then goes home when the annotation clears.
+
+The overlay is one click-through window per monitor. It never takes a click or
+a key: WindowTransparentForInput *and* `WS_EX_TRANSPARENT | WS_EX_LAYERED |
+WS_EX_NOACTIVATE` set explicitly, because an overlay that eats one click breaks
+the app it is explaining. Verified by asking Windows which window is under the
+target point — it answers with the window *beneath*. Escape clears everything:
+the overlay cannot have focus, so Escape is claimed as a global hotkey **only
+while something is on screen**, and released the moment it clears. Annotations
+also clear themselves after `ui.overlay_seconds`, and the timer that does it
+wakes once per expiry rather than polling.
+
+**Mapping Claude's coordinates back onto the screen** is the part that has to be
+exactly right. Claude reasons in pixels of the image it received, which was
+cropped, grabbed at the monitor's scale factor and downscaled to 1568 px. Each
+capture records the logical rectangle it covered and the final size of the
+image sent; device pixels and the downscale then cancel out, and a point is a
+proportion of one mapped onto the other. `overlay/mapping.py` does this and
+nothing else, with tests at every stock scale factor (100–200 %), on monitors at
+negative coordinates, and against the real downscaling function. The tools refuse
+to draw against a dropped photo — it has no place on the screen, and a
+confidently wrong arrow is worse than none.
+
+### Keeping our windows out of the screenshots
+
+The obvious tool, `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, **does not
+work on the avatar or the overlay**. Measured on Windows 10 22H2: it succeeds on
+an opaque window and fails with error 8 on any translucent (layered) one — and
+both of those are translucent. The avatar had been appearing in captures despite
+a setting meant to prevent it.
+
+So every capture now goes through a *cloak*: our windows are hidden, the screen
+is given 80 ms to repaint, the grab happens, and they come back — even if the
+grab fails. The avatar blinks out for a tenth of a second; in exchange, the
+image sent to Claude is guaranteed clean. Checked with a control: a raw grab
+shows a test window and the overlay's accent ring, and the same capture through
+the cloak shows neither. This also fixed the window picker, which used to grab
+immediately after hiding its halo, before the screen had repainted.
+
+`ui.exclude_from_capture` therefore does something narrower, and true: it hides
+the **opaque panels** — answers, command palette, approvals, settings — from
+screen sharing and recording, which Windows does allow (verified: affinity
+`0x11` on all four). You see them; the people watching your Teams or Zoom share
+do not. **The wizard himself and the on-screen arrows cannot be hidden from
+screen sharing**; they are only ever removed from the captures this app makes.
 
 ## Look and feel
 
@@ -401,6 +456,8 @@ src/wizard/
   config_writer.py  edits config.toml one line at a time, keeping comments
   hotkey_spec.py    capturing a shortcut, and finding two that collide
   markdown_blocks.py  splitting an answer into prose and highlighted code
+  overlay/          on-screen guidance: mapping, scene, surfaces, MCP tools
+  capture/cloak.py  keeps our windows out of our own screenshots
   avatar_window.py  the frameless translucent always-on-top window
   hotkeys.py        RegisterHotKey bridged into Qt via a native event filter
   tray.py           tray icon and menu

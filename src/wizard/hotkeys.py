@@ -60,6 +60,31 @@ class GlobalHotkeys(QAbstractNativeEventFilter):
         self._callbacks[hotkey_id] = callback
         return True
 
+    def grab(self, spec: str, callback) -> int | None:
+        """Bind a shortcut for a while; returns an id to `release` it with.
+
+        For keys that must only be claimed briefly — plain Escape while the
+        overlay is up. Claiming Escape for good would steal it from every other
+        app on the machine, so it is released the moment the overlay clears,
+        and a failure here is not recorded as a configuration problem.
+        """
+        try:
+            modifiers, vk = winapi.parse_hotkey(spec)
+        except winapi.HotkeyError:
+            return None
+        hotkey_id = self._next_id
+        if not winapi.register_hotkey(self._hwnd, hotkey_id, modifiers, vk):
+            return None
+        self._next_id += 1
+        self._callbacks[hotkey_id] = callback
+        return hotkey_id
+
+    def release(self, hotkey_id: int | None) -> None:
+        if hotkey_id is None or hotkey_id not in self._callbacks:
+            return
+        winapi.unregister_hotkey(self._hwnd, hotkey_id)
+        del self._callbacks[hotkey_id]
+
     def unregister_all(self) -> None:
         for hotkey_id in list(self._callbacks):
             winapi.unregister_hotkey(self._hwnd, hotkey_id)

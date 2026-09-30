@@ -26,6 +26,7 @@ __all__ = [
     "Hotkeys",
     "LauncherEntry",
     "MonitorSettings",
+    "UiSettings",
     "config_dir",
     "config_path",
     "database_path",
@@ -54,6 +55,7 @@ class Hotkeys:
     launcher: str = "ctrl+alt+Space"
     capture_region: str = "ctrl+alt+S"
     ask_claude: str = "ctrl+alt+C"
+    capture_screen: str = "ctrl+alt+E"
 
 
 @dataclass
@@ -82,6 +84,18 @@ class ClaudeSettings:
 
 
 @dataclass
+class UiSettings:
+    # Hide our opaque panels (answers, palette, approvals, settings) from
+    # screen sharing and recording. The avatar and the overlay are translucent
+    # and Windows refuses this on translucent windows, so they cannot be
+    # hidden from other apps; they are always kept out of our own captures by
+    # the capture cloak, whatever this says.
+    exclude_from_capture: bool = True
+    # How long an arrow or a highlight stays up before clearing itself.
+    overlay_seconds: float = 12.0
+
+
+@dataclass
 class ClipboardSettings:
     enabled: bool = True
     max_entries: int = 200
@@ -103,6 +117,7 @@ class Config:
     monitor: MonitorSettings = field(default_factory=MonitorSettings)
     clipboard: ClipboardSettings = field(default_factory=ClipboardSettings)
     claude: ClaudeSettings = field(default_factory=ClaudeSettings)
+    ui: UiSettings = field(default_factory=UiSettings)
     launcher: list[LauncherEntry] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -221,6 +236,7 @@ def load_config(path: Path | None = None) -> Config:
     _load_section(raw, "monitor", config.monitor, config.warnings)
     _load_section(raw, "clipboard", config.clipboard, config.warnings)
     _load_section(raw, "claude", config.claude, config.warnings)
+    _load_section(raw, "ui", config.ui, config.warnings)
     config.launcher = _load_launcher(raw, config.warnings)
 
     # Clamp the values where an out-of-range number would break the UI.
@@ -230,6 +246,7 @@ def load_config(path: Path | None = None) -> Config:
         max(config.monitor.interval_seconds, 0.5), 60.0
     )
     config.clipboard.max_entries = min(max(config.clipboard.max_entries, 10), 5000)
+    config.ui.overlay_seconds = min(max(config.ui.overlay_seconds, 2.0), 120.0)
     config.claude.permission_timeout_seconds = min(
         max(config.claude.permission_timeout_seconds, 5), 600
     )

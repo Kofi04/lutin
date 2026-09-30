@@ -540,3 +540,56 @@ def should_stay_quiet() -> bool:
     own notifications — so this asks Windows rather than guessing.
     """
     return user_notification_state() in _QUIET_STATES
+
+
+# ---------------------------------------------------------------------------
+# Overlay windows: click-through, and hidden from screen capture
+# ---------------------------------------------------------------------------
+
+_GWL_EXSTYLE = -20
+_WS_EX_LAYERED = 0x00080000
+_WS_EX_TRANSPARENT = 0x00000020
+_WS_EX_NOACTIVATE = 0x08000000
+
+_WDA_NONE = 0x00000000
+#: Windows 10 2004 (build 19041) and later. Older builds reject it, which the
+#: caller learns from the return value.
+_WDA_EXCLUDEFROMCAPTURE = 0x00000011
+
+
+def make_click_through(hwnd: int) -> bool:
+    """Let every click pass straight through a window to whatever is below.
+
+    Qt's WindowTransparentForInput asks for this, but whether a particular Qt
+    build sets WS_EX_TRANSPARENT *and* WS_EX_LAYERED has varied between
+    versions. An overlay that swallows one click is an overlay that breaks the
+    user's app, so the styles are set explicitly as well.
+    """
+    if not IS_WINDOWS or not hwnd:
+        return False
+    handle = wintypes.HWND(hwnd)
+    get_long = getattr(_user32, "GetWindowLongPtrW", _user32.GetWindowLongW)
+    set_long = getattr(_user32, "SetWindowLongPtrW", _user32.SetWindowLongW)
+    style = get_long(handle, _GWL_EXSTYLE)
+    wanted = style | _WS_EX_LAYERED | _WS_EX_TRANSPARENT | _WS_EX_NOACTIVATE
+    if wanted == style:
+        return True
+    set_long(handle, _GWL_EXSTYLE, wanted)
+    return (get_long(handle, _GWL_EXSTYLE) & _WS_EX_TRANSPARENT) != 0
+
+
+def exclude_from_capture(hwnd: int, exclude: bool = True) -> bool:
+    """Hide a window from screenshots, recordings and screen sharing.
+
+    This is what stops the avatar and the overlay from appearing in the
+    captures the app itself sends to Claude. It has a side effect the user
+    must know about, and the README says so: the same windows also vanish from
+    Teams, Zoom, OBS and every other capture — which is why it is a setting.
+    """
+    if not IS_WINDOWS or not hwnd:
+        return False
+    affinity = _WDA_EXCLUDEFROMCAPTURE if exclude else _WDA_NONE
+    try:
+        return bool(_user32.SetWindowDisplayAffinity(wintypes.HWND(hwnd), affinity))
+    except (AttributeError, OSError):
+        return False

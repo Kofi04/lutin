@@ -26,6 +26,11 @@ from dataclasses import dataclass
 from PySide6.QtCore import QObject, Signal
 
 from ..capture import Capture
+from ..overlay.tools import PROMPT_HINT as OVERLAY_HINT
+from ..overlay.tools import QUALIFIED as OVERLAY_TOOLS
+from ..overlay.tools import SERVER as OVERLAY_SERVER
+from ..overlay.tools import OverlayBridge
+from ..overlay.tools import build_server as build_overlay_server
 from ..ui_claude import ToolRequest
 
 #: Tools Claude may use without ever asking. Read-only, no side effects.
@@ -141,6 +146,13 @@ class ClaudeSession(QObject):
         self._task: asyncio.Task | None = None
 
         self._client = None  # ClaudeSDKClient, once connected
+
+        #: Where the last screen capture came from. The overlay tools map
+        #: Claude's coordinates against this, so it must be the capture
+        #: Claude is actually looking at. None until one is sent, and after a
+        #: dropped file, which has no place on the screen.
+        self._frame = None
+        self.overlay = OverlayBridge(self)
         self._state = OFFLINE
         self._connect_lock: asyncio.Lock | None = None
         self._retry_at: float = 0.0
@@ -296,6 +308,7 @@ class ClaudeSession(QObject):
         """
         self._session_id = None
         self._always.clear()
+        self._frame = None
         asyncio.run_coroutine_threadsafe(self._restart(), self._loop)
 
     async def _restart(self) -> None:
@@ -372,6 +385,9 @@ class ClaudeSession(QObject):
         # `allowed_tools` pre-approves; it does not restrict. Anything outside
         # the list still reaches `can_use_tool`, which is where the user decides.
         allowed = list(READ_ONLY_TOOLS) if self._auto_approve_read_only else []
+        # Drawing on the screen cannot change anything, so asking permission
+        # to point at a button would be absurd.
+        allowed += list(OVERLAY_TOOLS)
         # The SDK warns that `allowed_tools` shadows `can_use_tool`. That is
         # exactly what auto_approve_read_only asks for, so silence it here
         # rather than train the user to ignore warnings.
@@ -388,11 +404,14 @@ class ClaudeSession(QObject):
             # enough. Token-level streaming means parsing raw stream events,
             # and that is not worth the risk for the gain here.
             include_partial_messages=False,
+            mcp_servers={OVERLAY_SERVER: build_overlay_server(
+                self.overlay, lambda: self._frame
+            )},
             system_prompt=(
                 "Tu réponds dans une petite bulle sur le bureau de l'utilisateur. "
                 "Réponds en français, de façon concise et directe. "
                 "Si on te montre une capture d'écran, décris ce qui compte, "
-                "pas chaque pixel."
+                "pas chaque pixel. " + OVERLAY_HINT
             ),
             # Marks sessions Little Wizard started, so the hook bridge can tell them
             # apart from the user's own terminals and stay out of the way.
@@ -436,6 +455,12 @@ class ClaudeSession(QObject):
         if client is None:
             self.failed.emit(self._offline_message())
             return
+
+        if capture is not None:
+            # A new image replaces the old one as the frame of reference; a
+            # dropped file clears it, so the tools refuse rather than point
+            # into a screenshot Claude is no longer looking at.
+            self._frame = capture.frame
 
         pending_text: list[str] = []
 

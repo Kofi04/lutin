@@ -2,12 +2,12 @@
 
 One translucent overlay is created per screen so the interaction works on a
 multi-monitor desktop. The overlays must be hidden *before* the grab, or the
-capture contains our own dark veil; `_grab_after_repaint` handles that delay.
+capture contains our own dark veil; the controller's cloak handles that delay.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QPoint, QRect, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QPoint, QRect, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QGuiApplication,
@@ -25,7 +25,6 @@ _MIN_SIDE = 6  # below this the user meant to click, not to select
 
 # Windows needs a moment to actually repaint the desktop after our overlays
 # hide. Grabbing immediately captures the veil that is still on screen.
-_REPAINT_DELAY_MS = 80
 
 
 class _ScreenOverlay(QWidget):
@@ -129,9 +128,15 @@ class _ScreenOverlay(QWidget):
 
 
 class RegionSelector(QObject):
-    """Drives one overlay per screen and grabs whatever the user framed."""
+    """Drives one overlay per screen and reports the rectangle the user framed.
 
-    captured = Signal(QImage, QRect)
+    It does not grab. Grabbing waits for the screen to repaint and for our
+    own windows to be out of the way, which the controller's cloak owns for
+    every kind of capture, so it happens in one place.
+    """
+
+    #: A logical rectangle, after the veils have been closed.
+    selected = Signal(QRect)
     cancelled = Signal()
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -167,14 +172,7 @@ class RegionSelector(QObject):
 
     def _on_selected(self, rect: QRect) -> None:
         self._close_overlays()
-        QTimer.singleShot(_REPAINT_DELAY_MS, lambda: self._grab_after_repaint(rect))
-
-    def _grab_after_repaint(self, rect: QRect) -> None:
-        image = grab_rect(rect)
-        if image is None or image.isNull():
-            self.cancelled.emit()
-            return
-        self.captured.emit(image, rect)
+        self.selected.emit(rect)
 
 
 def grab_rect(rect: QRect) -> QImage | None:

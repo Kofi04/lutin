@@ -47,6 +47,7 @@ from .features.monitor import SystemMonitor
 from .features.timers import Reminder, TimerManager
 from .hotkeys import GlobalHotkeys
 from .mood import Mood, claude_mood_for, combine
+from .overlay.manager import OverlayManager
 from .paths import migrate_legacy_data
 from .sessions import EVENT_STATES, SessionRegistry, describe
 from .storage import Storage
@@ -96,6 +97,12 @@ class AvatarApp:
         # it and none of them carry a stylesheet of their own any more.
         self.theme = ThemeWatcher()
         self.toasts = ToastManager(self.theme.theme)
+        self.overlay = OverlayManager(
+            self.theme.theme,
+            default_ttl=self.config.ui.overlay_seconds,
+        )
+        self._escape_id: int | None = None
+        self._home_position = None
         self.theme.changed.connect(self._apply_theme)
         self._apply_theme(self.theme.theme)
 
@@ -111,6 +118,9 @@ class AvatarApp:
         # The avatar is always-on-top, so without this the window lookup would
         # only ever find the avatar itself.
         self.capture.ignore_window(self.avatar)
+        # WDA_EXCLUDEFROMCAPTURE fails on translucent windows (error 8), so
+        # the avatar is hidden for the instant of each grab instead.
+        self.capture.hide_during_capture(self.avatar)
         self.toasts.set_anchor(self.avatar)
         self._capture_preview: CapturePreview | None = None
 
@@ -214,6 +224,7 @@ class AvatarApp:
         """Restyle everything at once, including windows already open."""
         self.qt.setStyleSheet(stylesheet(theme))
         self.toasts.set_theme(theme)
+        self.overlay.set_theme(theme)
         if getattr(self, "_ask_panel", None) is not None:
             self._ask_panel.set_dark(theme.dark)
 
@@ -245,6 +256,13 @@ class AvatarApp:
         self.claude.reset_answer.connect(self._on_claude_reset)
         self.claude.permission_requested.connect(self._on_permission_requested)
         self.claude.connection_changed.connect(self._on_claude_connection)
+        self.claude.overlay.point_requested.connect(self._on_point_requested)
+        self.claude.overlay.highlight_requested.connect(self.overlay.highlight)
+        self.claude.overlay.steps_requested.connect(self.overlay.show_steps)
+        self.claude.overlay.clear_requested.connect(self.overlay.clear)
+        self.overlay.escape_hook = self._grab_escape
+        self.overlay.surface_created = self.capture.hide_during_capture
+        self.overlay.active_changed.connect(self._on_overlay_active)
 
         self.bridge.event.connect(self._on_hook_event)
         self.bridge.decision_requested.connect(self._on_bridge_decision)
@@ -283,6 +301,9 @@ class AvatarApp:
         self.hotkeys.register(hotkeys.toggle_avatar, self._toggle_avatar)
         self.hotkeys.register(hotkeys.capture_region, self.capture.start_region)
         self.hotkeys.register(hotkeys.ask_claude, lambda: self._open_ask(None))
+        self.hotkeys.register(
+            hotkeys.capture_screen, self.capture.capture_active_screen
+        )
 
     # -- actions ----------------------------------------------------------
 
@@ -336,6 +357,7 @@ class AvatarApp:
     def _preview_capture(self, capture) -> None:
         if self._capture_preview is None:
             self._capture_preview = CapturePreview()
+            self._protect(self._capture_preview)
             self._capture_preview.confirmed.connect(self._on_capture_confirmed)
         self._capture_preview.show_capture(capture)
 
@@ -353,6 +375,7 @@ class AvatarApp:
 
         if self._ask_panel is None:
             self._ask_panel = AskPanel()
+            self._protect(self._ask_panel)
             self._ask_panel.set_dark(self.theme.theme.dark)
             self._ask_panel.asked.connect(self._on_asked)
             self._ask_panel.interrupted.connect(self.claude.cancel)
@@ -426,6 +449,7 @@ class AvatarApp:
 
         if self._approval is None:
             self._approval = ApprovalCard()
+            self._protect(self._approval)
             self._approval.decided.connect(self._on_approval_decided)
 
         request_id, request = self._approval_queue.popleft()
@@ -572,9 +596,88 @@ class AvatarApp:
             ),
         ]
 
+    # -- on-screen guidance -----------------------------------------------
+
+    def _protect(self, widget) -> None:
+        """Hide one of our panels from screen sharing, if the user wants that.
+
+        Only for opaque windows. The avatar and the overlay are translucent,
+        and Windows refuses SetWindowDisplayAffinity on those (error 8, on
+        this machine); they are kept out of our own captures by the cloak
+        instead, and cannot be hidden from anyone else's.
+        """
+        if widget is None:
+            return
+        winapi.exclude_from_capture(
+            int(widget.winId()), self.config.ui.exclude_from_capture
+        )
+
+    def _protect_all(self) -> None:
+        for widget in (
+            self._ask_panel,
+            self._approval,
+            self._palette,
+            self._settings,
+            self._capture_preview,
+        ):
+            self._protect(widget)
+
+    def _grab_escape(self, active: bool) -> None:
+        """Claim Escape only while something is on screen.
+
+        The overlay is click-through, so it can never have keyboard focus;
+        a global hotkey is the only way Escape reaches it. Holding Escape
+        any longer than that would steal it from every other app.
+        """
+        if active and self._escape_id is None:
+            self._escape_id = self.hotkeys.grab("escape", self.overlay.clear)
+        elif not active and self._escape_id is not None:
+            self.hotkeys.release(self._escape_id)
+            self._escape_id = None
+
+    def _on_point_requested(self, x: float, y: float, label: str) -> None:
+        self.overlay.point_at(x, y, label)
+        self._fly_towards(x, y)
+
+    def _fly_towards(self, x: float, y: float) -> None:
+        """Send the wizard to stand beside what he is pointing at."""
+        from PySide6.QtCore import QPoint
+
+        from .design import animate
+
+        if not self.avatar.isVisible():
+            return
+        if self._home_position is None:
+            self._home_position = self.avatar.pos()
+        size = self.avatar.width()
+        # Stand below-left of the target, so he never covers it, and aim the
+        # staff back up at it.
+        destination = QPoint(int(x) - size - 24, int(y) + 18)
+        screen = self.qt.screenAt(QPoint(int(x), int(y)))
+        if screen is not None:
+            area = screen.availableGeometry()
+            destination.setX(max(area.left(), min(destination.x(), area.right() - size)))
+            destination.setY(max(area.top(), min(destination.y(), area.bottom() - size)))
+        centre = destination + QPoint(size // 2, size // 2)
+        dx, dy = x - centre.x(), y - centre.y()
+        length = max(1.0, (dx * dx + dy * dy) ** 0.5)
+        self.avatar.set_aim(dx / length, dy / length)
+        self.avatar.play_emote(Emote.POINTING)
+        animate(self.avatar, b"pos", self.avatar.pos(), destination, 420)
+
+    def _on_overlay_active(self, active: bool) -> None:
+        if active or self._home_position is None:
+            return
+        from .design import animate
+
+        home, self._home_position = self._home_position, None
+        self.avatar.release_emote()
+        animate(self.avatar, b"pos", self.avatar.pos(), home, 420)
+
     def _open_settings(self) -> None:
         if self._settings is None:
             self._settings = SettingsWindow()
+            self._protect(self._settings)
             # Saving writes the file; reloading is what makes it take effect,
             # hotkeys included, without a restart.
             self._settings.saved.connect(self.reload_config)
@@ -584,6 +687,7 @@ class AvatarApp:
         """One field over everything: actions, launchers, notes, clipboard."""
         if self._palette is None:
             self._palette = CommandPalette()
+            self._protect(self._palette)
             self._palette.source_failed.connect(
                 lambda name, why: self.notify(
                     "Palette de commandes",
@@ -708,6 +812,7 @@ class AvatarApp:
         self.config = load_config()
 
         self.avatar.apply_appearance(self.config.appearance)
+        self._protect_all()
         self.monitor.apply_settings(self.config.monitor)
         self.clipboard.apply_settings(self.config.clipboard)
         self.tray.apply_config(self.config)
