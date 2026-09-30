@@ -25,8 +25,9 @@ from PySide6.QtCore import QBuffer, QByteArray, Qt  # noqa: E402
 from PySide6.QtGui import QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from wizard.features.monitor import Mood  # noqa: E402
-from wizard.sprite import SpriteState, draw_avatar  # noqa: E402
+from wizard.character.animation import still_frame  # noqa: E402
+from wizard.character.emote import Emote  # noqa: E402
+from wizard.character.renderer import load_renderer  # noqa: E402
 
 # Every size Windows asks for: 16 in the taskbar and tray, 32 on the desktop,
 # 48 in medium-icon views, 256 for the extra-large view and the file dialog.
@@ -35,6 +36,10 @@ SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 # The character does not fill its 96x96 design square, which is right for a
 # floating sprite and wasteful for an icon. Zoom so it reads at 16px.
 ZOOM = 1.26
+
+
+#: Set in main(), once there is a QApplication to load pixmaps against.
+RENDERER = None
 
 
 def _feature_scale(size: int) -> float:
@@ -65,14 +70,11 @@ def render(size: int) -> QByteArray:
     # The body sits slightly above the square's centre, so recentre on it.
     painter.translate(-centre, -centre + size * 0.02)
 
-    draw_avatar(
+    RENDERER.draw(
         painter,
-        size,
-        SpriteState(
-            mood=Mood.CALM,
-            time=0.0,
-            shadow=False,
-            feature_scale=_feature_scale(size),
+        float(size),
+        still_frame(
+            Emote.IDLE, shadow=False, feature_scale=_feature_scale(size)
         ),
     )
     painter.end()
@@ -118,6 +120,11 @@ def build_ico(frames: dict[int, QByteArray]) -> bytes:
 
 def main() -> int:
     app = QApplication(sys.argv)  # noqa: F841 - QPixmap needs a live application
+
+    global RENDERER
+    # Built after the QApplication: a sprite sheet loads QPixmaps, which need one.
+    RENDERER = load_renderer()
+    print(f"renderer: {RENDERER.name}")
 
     target = pathlib.Path(__file__).resolve().parent.parent / "src" / "wizard" / "app.ico"
     frames = {size: render(size) for size in SIZES}

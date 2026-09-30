@@ -1,10 +1,11 @@
 # Little Wizard
 
-A small animated companion that floats just above the Windows taskbar, with a
-tray icon, global hotkeys, clipboard history, quick notes and countdown
-reminders. Its mood reflects what your machine is doing.
+A small animated wizard who floats just above the Windows taskbar, with a tray
+icon, global hotkeys, clipboard history, quick notes and countdown reminders.
+He shows you what your machine and your Claude Code sessions are doing, and he
+answers questions about whatever is on your screen.
 
-![the eight moods](docs/moods.png)
+![the fourteen poses](docs/poses.png)
 
 > **This app used to be called Lutin.** The rename moved its data folder from
 > `%APPDATA%\Lutin` to `%APPDATA%\LittleWizard`, so the first start after
@@ -85,7 +86,14 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
   consecutive duplicates, pruned to `max_entries`. Select an entry and press
   Enter to put it back on the clipboard.
 - **Moods** come from CPU, RAM and battery: calm → busy → stressed, plus a
-  tired face when you are below `battery_low` on battery power.
+  tired face when you are below `battery_low` on battery power. A mood that
+  comes from Claude — a session working, or waiting for your answer — outranks
+  the machine's, because one needs you and the other is just weather.
+- **The staff is the status light.** Its colour and its pulse are the state
+  indicator, rather than a badge stuck to the side of the character: gold at
+  rest, blue while Claude works, bright amber pulsing when something is waiting
+  on you. He also dozes off after three minutes of nothing, and wakes when you
+  come near.
 - **Reminders** accept `25`, `25m`, `1h30`, `90s` or `25:00`, with presets
   including a 25-minute pomodoro.
 - **Captures** are downscaled to a 1568px long edge (past that Claude
@@ -201,16 +209,57 @@ display: config parsing and clamping, SQLite behaviour (dedup, pruning, LIKE
 escaping), the mood thresholds, the hotkey/duration parsers, image sizing,
 the hook framing and settings.json surgery, and the rename migration.
 
+## The character
+
+Little Wizard is a small African wizard: dark skin, big round eyes, an indigo
+robe and a pointed hat banded with sober bogolan- and kente-inspired geometry,
+cowrie shells, and a carved staff whose tip carries the app's state light.
+
+He is drawn **twice over**, and the app picks whichever is available:
+
+| Source | When | Where |
+|---|---|---|
+| `character/painter.py` | always — no assets needed | QPainter, resolution-independent |
+| `character/sheet.py` | as soon as `assets/character/wizard_idle_1.png` exists | PNG frames, which then take over silently |
+
+Nothing else in the app knows which one it got. `character/animation.py` owns
+the clock — poses, transitions, blinking, dozing off — and hands both renderers
+the same `Frame`. It imports nothing from Qt, which is why the fiddly parts (a
+pose that never reverts, blinking that stops re-arming, waking up onto a mood
+that changed while he slept) are covered by ordinary unit tests instead of by
+looking at the screen.
+
+To generate hand-drawn art, **`docs/ASSETS_BRIEF.md`** has the character sheet,
+the exact palette, the framing rules and a ready-to-paste prompt per pose. A
+partial set is fine: only `idle` is required and missing poses fall back to it.
+
+To look at every pose at once:
+
+```powershell
+.venv\Scripts\python.exe tools\contact_sheet.py            # from code
+.venv\Scripts\python.exe tools\contact_sheet.py --assets   # from assets/
+```
+
+That writes `docs/poses.png` at 96, 48, 32 and 16px, and prints which renderer
+it used — which is the quickest way to find out why your PNGs are not showing
+up (almost always a filename that does not match).
+
+**Cost.** The body — gradients, clipped paths, woven bands — is rendered once
+into a pixmap and reused; only the eyes, mouth, staff light and props are drawn
+each frame, and the halo is a cached pixmap rather than a live radial gradient.
+Drawn naively the character cost 5.3% of a core at idle; it now costs **0.7% of
+one core** (0.18% of a four-core machine), measured over 40 seconds.
+
 ## The icon
 
 `src/wizard/app.ico` is generated, not hand-drawn — it comes from the same
-`draw_avatar` code as the running avatar:
+code as the running character:
 
 ```powershell
 .venv\Scripts\python.exe tools\make_icon.py
 ```
 
-Re-run it after changing `sprite.py`, then re-run `scripts\shortcut.ps1` so the
+Re-run it after changing the character, then re-run `scripts\shortcut.ps1` so the
 shell picks up the new file. It writes nine sizes (16 to 256) because Windows
 picks a different one per context, and below 32px it enlarges the eyes and
 thickens the mouth — at 16px the default proportions blur into the body.
@@ -249,7 +298,7 @@ src/wizard/
   winapi.py         ctypes wrappers: taskbar, CPU/RAM/battery, hotkeys, autostart
   config.py         TOML loading with defaults and clamping
   storage.py        SQLite: notes + clipboard history
-  sprite.py         the avatar, drawn with QPainter (no image assets)
+  character/        the wizard: poses, animation engine, two renderers
   avatar_window.py  the frameless translucent always-on-top window
   hotkeys.py        RegisterHotKey bridged into Qt via a native event filter
   tray.py           tray icon and menu
@@ -261,7 +310,9 @@ hooks/
 scripts/
   shortcut.ps1      creates/removes the Desktop and Start Menu shortcuts
 tools/
-  make_icon.py      renders sprite.py into a multi-resolution app.ico
+  make_icon.py      renders the character into a multi-resolution app.ico
+  contact_sheet.py  renders every pose to docs/poses.png, to look at them
+assets/character/   hand-drawn frames, if you have any (see docs/ASSETS_BRIEF.md)
 PLAN.md             the plan this app is being built out against
 ```
 

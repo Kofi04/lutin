@@ -16,21 +16,21 @@ does not expose.
 
 from __future__ import annotations
 
-import math
 import os
-import random
 import re
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QSettings, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QRect, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
 from . import winapi
 from .branding import APP_NAME
+from .character.animation import Animator
+from .character.emote import Emote, emote_for
+from .character.renderer import BASE_SIZE, load_renderer
 from .config import Appearance
 from .mood import Mood
 from .paths import state_path
-from .sprite import BASE_SIZE, SpriteState, draw_avatar
 
 # Frame pacing is adaptive. Nobody is studying the idle bob, and an avatar that
 # reports your CPU load has no business adding to it: 10 fps is plenty for a
@@ -73,14 +73,12 @@ class AvatarWindow(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._appearance = appearance
-        self._state = SpriteState()
+        self._animator = Animator()
+        self._renderer = load_renderer()
+        self._frame = self._animator.advance(0.0)
         self._settings = QSettings(
             str(state_path()), QSettings.Format.IniFormat
         )
-
-        self._elapsed = 0.0
-        self._next_blink = self._schedule_blink()
-        self._blink_started_at: float | None = None
 
         self._drag_origin: QPoint | None = None
         self._dragged = False
@@ -107,9 +105,28 @@ class AvatarWindow(QWidget):
         self.restore_position()
 
     def set_mood(self, mood: Mood) -> None:
-        if mood is not self._state.mood:
-            self._state.mood = mood
-            self.update()
+        self._animator.set_base(emote_for(mood))
+
+    def play_emote(self, emote: Emote) -> None:
+        """Show a pose now. One-shots revert on their own."""
+        self._animator.play(emote)
+
+    def release_emote(self) -> None:
+        """Drop back to the pose the mood asks for."""
+        self._animator.release()
+
+    def set_microphone_level(self, level: float) -> None:
+        """0..1, drives the staff pulse while he is listening."""
+        self._animator.set_level(level)
+
+    def set_aim(self, x: float, y: float) -> None:
+        """Where to point, each axis in [-1, 1]."""
+        self._animator.set_aim(x, y)
+
+    @property
+    def renderer_name(self) -> str:
+        """Which source the character is coming from: code, or image files."""
+        return self._renderer.name
 
     def restore_position(self) -> None:
         """Put the avatar back where the user left it, or snap to the taskbar."""
@@ -168,16 +185,17 @@ class AvatarWindow(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
-        draw_avatar(painter, float(min(self.width(), self.height())), self._state)
+        side = float(min(self.width(), self.height()))
+        self._renderer.draw(painter, side, self._frame)
 
     def enterEvent(self, event) -> None:
-        self._state.hovered = True
+        self._animator.set_hovered(True)
         self._timer.setInterval(_FRAME_MS_ACTIVE)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self._state.hovered = False
-        self._state.look = QPointF(0.0, 0.0)
+        self._animator.set_hovered(False)
+        self._animator.set_look(0.0, 0.0)
         self._timer.setInterval(_FRAME_MS_IDLE)
         super().leaveEvent(event)
 
@@ -193,7 +211,7 @@ class AvatarWindow(QWidget):
         self._targeting = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         self._drag_origin = event.globalPosition().toPoint() - self.pos()
         self._dragged = False
-        self._state.pressed = True
+        self._animator.set_pressed(True)
         self.update()
 
         if self._targeting:
@@ -224,7 +242,7 @@ class AvatarWindow(QWidget):
             super().mouseReleaseEvent(event)
             return
 
-        self._state.pressed = False
+        self._animator.set_pressed(False)
         self._drag_origin = None
         was_targeting, self._targeting = self._targeting, False
         self.update()
@@ -247,7 +265,7 @@ class AvatarWindow(QWidget):
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls() and self._local_paths(event.mimeData()):
-            self._state.catching = True
+            self._animator.set_catching(True)
             self.update()
             event.acceptProposedAction()
 
@@ -256,13 +274,13 @@ class AvatarWindow(QWidget):
             event.acceptProposedAction()
 
     def dragLeaveEvent(self, event) -> None:
-        self._state.catching = False
+        self._animator.set_catching(False)
         self.update()
         super().dragLeaveEvent(event)
 
     def dropEvent(self, event) -> None:
         paths = self._local_paths(event.mimeData())
-        self._state.catching = False
+        self._animator.set_catching(False)
         self.update()
         if paths:
             event.acceptProposedAction()
@@ -285,39 +303,16 @@ class AvatarWindow(QWidget):
 
     # -- animation --------------------------------------------------------
 
-    def _schedule_blink(self) -> float:
-        return self._elapsed + random.uniform(2.5, 6.5)
-
     def _advance_frame(self) -> None:
         # Read the interval back rather than assuming it: it changes on hover.
-        self._elapsed += self._timer.interval() / 1000.0
-        self._state.time = self._elapsed
-        self._state.eye_open = self._eye_openness()
-        if self._state.hovered:
-            self._state.look = self._look_direction()
+        if self._frame.hovered:
+            self._animator.set_look(*self._look_direction())
+        self._frame = self._animator.advance(self._timer.interval() / 1000.0)
         self.update()
 
-    def _eye_openness(self) -> float:
-        blink_duration = 0.16
-        if self._blink_started_at is None:
-            if self._elapsed >= self._next_blink:
-                self._blink_started_at = self._elapsed
-            return 1.0
-
-        progress = (self._elapsed - self._blink_started_at) / blink_duration
-        if progress >= 1.0:
-            self._blink_started_at = None
-            self._next_blink = self._schedule_blink()
-            return 1.0
-        # One smooth down-up sweep over the blink.
-        return abs(math.cos(progress * math.pi))
-
-    def _look_direction(self) -> QPointF:
+    def _look_direction(self) -> tuple[float, float]:
         delta = QCursor.pos() - self.geometry().center()
-        return QPointF(
-            max(-1.0, min(1.0, delta.x() / _LOOK_RANGE)),
-            max(-1.0, min(1.0, delta.y() / _LOOK_RANGE)),
-        )
+        return (delta.x() / _LOOK_RANGE, delta.y() / _LOOK_RANGE)
 
     # -- helpers ----------------------------------------------------------
 
