@@ -31,35 +31,6 @@ from .branding import APP_NAME
 from .features.timers import TimerManager, parse_duration
 from .storage import Record, Storage
 
-STYLESHEET = """
-QDialog { background: #161B22; }
-QLabel { color: #C9D1D9; font-size: 12px; }
-QLabel#hint { color: #6E7681; }
-QLineEdit, QPlainTextEdit {
-    background: #0D1117; color: #E6EDF3;
-    border: 1px solid #30363D; border-radius: 6px; padding: 6px;
-    selection-background-color: #2FA89B;
-}
-QLineEdit:focus, QPlainTextEdit:focus { border-color: #2FA89B; }
-QPushButton {
-    background: #21262D; color: #E6EDF3;
-    border: 1px solid #30363D; border-radius: 6px; padding: 6px 12px;
-}
-QPushButton:hover { background: #30363D; }
-QPushButton:default { background: #2FA89B; border-color: #2FA89B; color: #06231F; }
-QListWidget {
-    background: #0D1117; color: #E6EDF3;
-    border: 1px solid #30363D; border-radius: 6px; outline: none;
-}
-QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #1B2028; }
-QListWidget::item:selected { background: #1F6F68; }
-QTabBar::tab {
-    background: transparent; color: #8B949E; padding: 6px 14px; border: none;
-}
-QTabBar::tab:selected { color: #E6EDF3; border-bottom: 2px solid #2FA89B; }
-QTabWidget::pane { border: none; }
-"""
-
 
 def _centre_on_cursor(widget: QWidget) -> None:
     """Open near the mouse, but always fully on screen."""
@@ -106,7 +77,6 @@ class QuickNoteDialog(QDialog):
         self._storage = storage
         self.setWindowTitle("Note rapide")
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
-        self.setStyleSheet(STYLESHEET)
         self.setMinimumWidth(420)
 
         self._editor = QPlainTextEdit(self)
@@ -162,7 +132,6 @@ class HistoryPanel(QDialog):
         super().__init__(parent)
         self._storage = storage
         self.setWindowTitle(APP_NAME)
-        self.setStyleSheet(STYLESHEET)
         self.resize(QSize(520, 420))
 
         self._search = QLineEdit(self)
@@ -288,7 +257,6 @@ class ReminderDialog(QDialog):
         super().__init__(parent)
         self._timers = timers
         self.setWindowTitle("Me rappeler")
-        self.setStyleSheet(STYLESHEET)
         self.setMinimumWidth(380)
 
         self._label = QLineEdit(self)

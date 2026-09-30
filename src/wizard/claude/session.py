@@ -153,11 +153,15 @@ class ClaudeSession(QObject):
         )
         self._thread.start()
 
+        #: The prewarm attempt, so shutdown can cancel one still in flight.
+        self._connect_task: asyncio.Future | None = None
         if prewarm:
             # Connecting spawns the Claude Code CLI and negotiates a session,
             # which takes seconds. Doing it now, on the worker thread, is the
             # whole point: the first question should not pay for it.
-            asyncio.run_coroutine_threadsafe(self._ensure_client(), self._loop)
+            self._connect_task = asyncio.run_coroutine_threadsafe(
+                self._ensure_client(), self._loop
+            )
 
     # -- connection -------------------------------------------------------
 
@@ -210,6 +214,12 @@ class ClaudeSession(QObject):
             self._note_failure(exc)
             return None
 
+        if self._closing:
+            # Shutdown started while the handshake was in progress. Close
+            # the client we just opened rather than publishing it.
+            await _quietly_disconnect(client)
+            return None
+
         self._client = client
         self._backoff = _BACKOFF_START
         self._retry_at = 0.0
@@ -258,6 +268,12 @@ class ClaudeSession(QObject):
         "I/O operation on closed pipe".
         """
         self._closing = True
+        # A prewarm still in flight would otherwise finish after we stop
+        # looking, set _client, and leave a CLI subprocess running with
+        # nobody left to disconnect it.
+        connecting = self._connect_task
+        if connecting is not None and not connecting.done():
+            connecting.cancel()
         task = self._task
         if task is not None and not task.done():
             task.cancel()

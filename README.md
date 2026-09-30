@@ -76,10 +76,14 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
 | Show an image | drop the file on the avatar | — |
 | Quick note | `Ctrl+Alt+N` | *Note rapide* |
 | Clipboard history | `Ctrl+Alt+V` | *Presse-papiers* (or a single tray click) |
-| Launcher menu | `Ctrl+Alt+Space` | *Lancer* |
+| Command palette | `Ctrl+Alt+Space` | *Lancer* |
 | Show / hide the avatar | `Ctrl+Alt+A` | *Masquer / Afficher le sorcier* |
 | Reminders | — | *Me rappeler…* |
 
+- **The command palette** (`Ctrl+Alt+Space`) searches actions, launcher entries,
+  notes and clipboard history together, so you never have to remember which menu
+  a thing lives in. Fuzzy, accent-insensitive (`reunion` finds *Réunion*), and
+  entirely keyboard-driven.
 - **Left-click the avatar** opens the full action menu; **drag it** to move it
   anywhere, and it remembers where you left it.
 - **Clipboard history** records text copies into SQLite, skipping blanks and
@@ -228,6 +232,36 @@ display: config parsing and clamping, SQLite behaviour (dedup, pruning, LIKE
 escaping), the mood thresholds, the hotkey/duration parsers, image sizing,
 the hook framing and settings.json surgery, and the rename migration.
 
+## Look and feel
+
+One design system, in `src/wizard/design/`, holds every colour, size, radius,
+font and animation duration. Before it, the same stylesheet was pasted into four
+files and had drifted; now nothing outside that package names a colour.
+
+- **Light and dark follow Windows automatically**, along with your accent
+  colour.
+- **The accent is checked for contrast, and nudged if it fails.** Windows' own
+  default blue `#0078D7` reaches only 4.499 against white text and worse against
+  black — *no* text colour passes WCAG AA on it. Rather than lower the bar or
+  ignore your choice, the fill is darkened in small steps until it passes:
+  `#0078D7` becomes `#0071cb`, the same blue, now readable.
+- **Mica and rounded corners on Windows 11**, via `DwmSetWindowAttribute`, with
+  an opaque themed fallback on Windows 10. **The Windows 11 path is written but
+  unverified** — this was developed on Windows 10 22H2, where those attributes
+  simply return a failure code. The fallback is the tested path.
+- **Animations honour the system setting.** Everything goes through one
+  `animate()` that checks `SPI_GETCLIENTAREAANIMATION` and jumps straight to the
+  end state when Windows says not to animate.
+- **Notifications are ours**, not tray balloons: themed, stacked above the
+  avatar, dismissed on a click, paused while the pointer is over them. Approvals
+  stay a real window, because a toast is something you may ignore and an
+  approval is not.
+- **He gets out of the way of full-screen apps.** Rather than comparing window
+  rectangles — which a maximised window fools and a borderless game defeats —
+  the app asks Windows through `SHQueryUserNotificationState` and hides while a
+  game, a video or a presentation is running. He comes back afterwards, unless
+  you had hidden him yourself first.
+
 ## The character
 
 Little Wizard is a small African wizard: dark skin, big round eyes, an indigo
@@ -318,6 +352,10 @@ src/wizard/
   config.py         TOML loading with defaults and clamping
   storage.py        SQLite: notes + clipboard history
   character/        the wizard: poses, animation engine, two renderers
+  design/           tokens, theme, stylesheet, window materials, motion
+  fuzzy.py          subsequence ranking for the command palette
+  ui_palette.py     the command palette
+  ui_toast.py       in-app notifications
   avatar_window.py  the frameless translucent always-on-top window
   hotkeys.py        RegisterHotKey bridged into Qt via a native event filter
   tray.py           tray icon and menu

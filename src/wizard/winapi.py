@@ -500,3 +500,43 @@ def migrate_autostart_value(legacy_name: str) -> bool:
             return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------------------
+# Full-screen detection
+# ---------------------------------------------------------------------------
+
+_QUNS_BUSY = 2
+_QUNS_RUNNING_D3D_FULL_SCREEN = 3
+_QUNS_PRESENTATION_MODE = 4
+
+#: States in which Windows itself suppresses notifications. Borrowing that
+#: judgement is better than comparing window rectangles to monitor rectangles,
+#: which gets fooled by a maximised window with a hidden taskbar and misses a
+#: borderless game that is not technically full-screen.
+_QUIET_STATES = frozenset(
+    {_QUNS_BUSY, _QUNS_RUNNING_D3D_FULL_SCREEN, _QUNS_PRESENTATION_MODE}
+)
+
+
+def user_notification_state() -> int:
+    """`SHQueryUserNotificationState`, or 0 when it cannot be read."""
+    if not IS_WINDOWS or _shell32 is None:
+        return 0
+    state = ctypes.c_int(0)
+    try:
+        result = _shell32.SHQueryUserNotificationState(ctypes.byref(state))
+    except (AttributeError, OSError):
+        return 0
+    # S_OK is 0; anything else means the answer is not usable.
+    return state.value if result == 0 else 0
+
+
+def should_stay_quiet() -> bool:
+    """True when something full-screen is running and we should get out of the way.
+
+    A game, a presentation or a full-screen video is exactly when an always-on
+    top avatar is most annoying, and it is also when Windows stops showing its
+    own notifications — so this asks Windows rather than guessing.
+    """
+    return user_notification_state() in _QUIET_STATES

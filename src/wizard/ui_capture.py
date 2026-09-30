@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from .capture import Capture
-from .ui import STYLESHEET, _centre_on_cursor
+from .ui import _centre_on_cursor
 
 _MAX_PREVIEW = 560  # longest edge of the thumbnail shown in the dialog
 
@@ -34,16 +34,13 @@ class CapturePreview(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Ce qui sera envoyé")
-        self.setStyleSheet(STYLESHEET)
 
         self._capture: Capture | None = None
 
         self._thumbnail = QLabel(self)
         self._thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumbnail.setMinimumSize(320, 200)
-        self._thumbnail.setStyleSheet(
-            "border: 1px solid #30363D; border-radius: 6px; background: #0D1117;"
-        )
+        self._thumbnail.setObjectName("card")
 
         self._summary = QLabel("", self, objectName="hint")
         self._warning = QLabel(

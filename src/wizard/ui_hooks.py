@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from .bridge.installer import InstallPlan
-from .ui import STYLESHEET, _centre_on_cursor
+from .ui import _centre_on_cursor
 
 
 class HookDiffDialog(QDialog):
@@ -27,7 +27,6 @@ class HookDiffDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setStyleSheet(STYLESHEET)
         self.resize(760, 520)
 
         self._intro = QLabel("", self)

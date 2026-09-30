@@ -39,6 +39,7 @@ from .config import (
     ensure_config_file,
     load_config,
 )
+from .design import ThemeWatcher, stylesheet
 from .features.clipboard import ClipboardWatcher
 from .features.launcher import LaunchError, launch
 from .features.monitor import SystemMonitor
@@ -53,6 +54,8 @@ from .ui import HistoryPanel, QuickNoteDialog, ReminderDialog
 from .ui_capture import CapturePreview
 from .ui_claude import ApprovalCard, AskPanel, ToolRequest
 from .ui_hooks import HookDiffDialog, summarise_backup
+from .ui_palette import Command, CommandPalette
+from .ui_toast import ToastManager
 
 
 class AvatarApp:
@@ -86,6 +89,13 @@ class AvatarApp:
         ensure_config_file()
         self.config: Config = load_config()
 
+        # The theme is applied to the QApplication, so every dialog inherits
+        # it and none of them carry a stylesheet of their own any more.
+        self.theme = ThemeWatcher()
+        self.toasts = ToastManager(self.theme.theme)
+        self.theme.changed.connect(self._apply_theme)
+        self._apply_theme(self.theme.theme)
+
         self.storage = Storage(database_path())
         self.timers = TimerManager()
         self.monitor = SystemMonitor(self.config.monitor)
@@ -98,6 +108,7 @@ class AvatarApp:
         # The avatar is always-on-top, so without this the window lookup would
         # only ever find the avatar itself.
         self.capture.ignore_window(self.avatar)
+        self.toasts.set_anchor(self.avatar)
         self._capture_preview: CapturePreview | None = None
 
         self.claude = ClaudeSession(
@@ -112,6 +123,8 @@ class AvatarApp:
         self._approval_current: int | None = None
         self._auth_checked = False
         self._reported_offline: set[str] = set()
+        self._quiet = False
+        self._hidden_for_quiet = False
 
         self.sessions = SessionRegistry()
         self.sessions.changed.connect(self._refresh_mood)
@@ -122,6 +135,7 @@ class AvatarApp:
         # queue has to remember which of the two a request came from.
         self._bridge_requests: set[int] = set()
 
+        self._palette: CommandPalette | None = None
         self._note_dialog: QuickNoteDialog | None = None
         self._history: HistoryPanel | None = None
         self._reminder_dialog: ReminderDialog | None = None
@@ -161,10 +175,10 @@ class AvatarApp:
             hooks_installer.is_installed(), hooks_installer.is_stale()
         )
         if not self.bridge.start():
-            self.tray.notify(
+            self.notify(
                 "Hooks",
                 f"Impossible d'ouvrir le canal : {self.bridge.error}",
-                warning=True,
+                kind="warning",
             )
         self.tray.show()
         self.avatar.show()
@@ -185,6 +199,11 @@ class AvatarApp:
 
     # -- wiring -----------------------------------------------------------
 
+    def _apply_theme(self, theme) -> None:
+        """Restyle everything at once, including windows already open."""
+        self.qt.setStyleSheet(stylesheet(theme))
+        self.toasts.set_theme(theme)
+
     def _connect(self) -> None:
         self.monitor.sampled.connect(self._on_sample)
 
@@ -200,7 +219,7 @@ class AvatarApp:
 
         self.capture.captured.connect(self._preview_capture)
         self.capture.failed.connect(
-            lambda message: self.tray.notify("Capture", message, warning=True)
+            lambda message: self.notify("Capture", message, kind="warning")
         )
         self.tray.capture_region_requested.connect(self.capture.start_region)
         self.tray.ask_claude_requested.connect(lambda: self._open_ask(None))
@@ -246,14 +265,36 @@ class AvatarApp:
         self.hotkeys.register(
             hotkeys.clipboard, lambda: self._open_history(HistoryPanel.CLIPBOARD_TAB)
         )
-        self.hotkeys.register(hotkeys.launcher, self._show_launcher_menu)
+        self.hotkeys.register(hotkeys.launcher, self._open_palette)
         self.hotkeys.register(hotkeys.toggle_avatar, self._toggle_avatar)
         self.hotkeys.register(hotkeys.capture_region, self.capture.start_region)
         self.hotkeys.register(hotkeys.ask_claude, lambda: self._open_ask(None))
 
     # -- actions ----------------------------------------------------------
 
+    def _update_quiet_mode(self) -> None:
+        """Get out of the way of a game, a video or a presentation.
+
+        Windows already decides when to stop showing its own notifications;
+        borrowing that judgement beats comparing window rectangles, which is
+        fooled by a maximised window and misses a borderless game.
+        """
+        quiet = winapi.should_stay_quiet()
+        if quiet == self._quiet:
+            return
+        self._quiet = quiet
+        if quiet:
+            self._hidden_for_quiet = self.avatar.isVisible()
+            self.avatar.hide()
+            self.toasts.clear()
+        elif self._hidden_for_quiet:
+            # Only put him back if we were the ones who hid him: the user
+            # may have hidden him deliberately before the game started.
+            self._hidden_for_quiet = False
+            self.avatar.show()
+
     def _on_sample(self, sample, mood) -> None:
+        self._update_quiet_mode()
         self._system_mood = mood
         self.tray.update_status(sample, mood)
         self._refresh_mood()
@@ -264,7 +305,7 @@ class AvatarApp:
         self.avatar.set_mood(combine(self._system_mood, claude))
 
     def _on_timer_fired(self, reminder: Reminder) -> None:
-        self.tray.notify("C'est l'heure", reminder.label)
+        self.notify("C'est l'heure", reminder.label)
         self.qt.beep()
 
     def _on_files_dropped(self, paths: list) -> None:
@@ -273,7 +314,7 @@ class AvatarApp:
         if paths:
             self.capture.capture_file(paths[0])
         if len(paths) > 1:
-            self.tray.notify(
+            self.notify(
                 "Capture",
                 f"{len(paths)} fichiers déposés, je ne garde que le premier.",
             )
@@ -291,7 +332,7 @@ class AvatarApp:
 
     def _open_ask(self, capture) -> None:
         if not self.config.claude.enabled:
-            self.tray.notify("Claude", "Désactivé dans la configuration.", warning=True)
+            self.notify("Claude", "Désactivé dans la configuration.", kind="warning")
             return
         if not self._check_auth_once():
             return
@@ -308,7 +349,7 @@ class AvatarApp:
         if self._ask_panel is not None:
             self._ask_panel.reset_answer()
             self._ask_panel.set_capture(None)
-        self.tray.notify("Claude", "Nouvelle discussion. Règles oubliées.")
+        self.notify("Claude", "Nouvelle discussion. Règles oubliées.")
 
     def _check_auth_once(self) -> bool:
         """Tell the user to log in *before* the SDK fails cryptically."""
@@ -316,7 +357,7 @@ class AvatarApp:
             return True
         status = check_auth()
         if not status.logged_in:
-            self.tray.notify("Claude Code", status.message(), warning=True)
+            self.notify("Claude Code", status.message(), kind="warning")
             return False
         self._auth_checked = True
         return True
@@ -343,7 +384,7 @@ class AvatarApp:
     def _on_claude_failed(self, message: str) -> None:
         if self._ask_panel is not None:
             self._ask_panel.show_error(message)
-        self.tray.notify("Claude", message, warning=True)
+        self.notify("Claude", message, kind="warning")
 
     # -- approvals --------------------------------------------------------
 
@@ -358,7 +399,7 @@ class AvatarApp:
         self.tray.set_connection(state, detail)
         if state == OFFLINE and detail and detail not in self._reported_offline:
             self._reported_offline.add(detail)
-            self.tray.notify("Claude", detail, warning=True)
+            self.notify("Claude", detail, kind="warning")
 
     def _on_permission_requested(self, request_id: int, request) -> None:
         self._approval_queue.append((request_id, request))
@@ -440,12 +481,12 @@ class AvatarApp:
         try:
             saved = hooks_installer.apply(plan)
         except OSError as exc:
-            self.tray.notify("Hooks", f"Écriture impossible : {exc}", warning=True)
+            self.notify("Hooks", f"Écriture impossible : {exc}", kind="warning")
             return
 
         installed = hooks_installer.is_installed()
         self.tray.set_hooks_installed(installed)
-        self.tray.notify(
+        self.notify(
             "Hooks installés" if installed else "Hooks retirés",
             summarise_backup(saved),
         )
@@ -478,18 +519,104 @@ class AvatarApp:
         # rather than off the bottom of the screen.
         self.tray.popup_menu(self.avatar.mapToGlobal(self.avatar.rect().topLeft()))
 
-    def _show_launcher_menu(self) -> None:
-        from PySide6.QtGui import QCursor
+    def _open_palette(self) -> None:
+        """One field over everything: actions, launchers, notes, clipboard."""
+        if self._palette is None:
+            self._palette = CommandPalette()
+            self._palette.source_failed.connect(
+                lambda name, why: self.notify(
+                    "Palette de commandes",
+                    f"La source « {name} » a échoué : {why}",
+                    kind="warning",
+                )
+            )
+            self._palette.add_source("actions", self._action_commands)
+            self._palette.add_source("launchers", self._launcher_commands)
+            self._palette.add_source("notes", self._note_commands)
+            self._palette.add_source("clips", self._clip_commands)
+        self._palette.open_palette()
 
-        menu = self.tray.launcher_menu()
-        menu.exec(QCursor.pos())
+    def _action_commands(self) -> list[Command]:
+        entries = [
+            ("Demander à Claude…", lambda: self._open_ask(None), "question ia chat"),
+            ("Montrer une zone…", self.capture.start_region, "capture ecran zone"),
+            ("Note rapide", self._open_quick_note, "ecrire memo"),
+            (
+                "Presse-papiers",
+                lambda: self._open_history(HistoryPanel.CLIPBOARD_TAB),
+                "copier historique",
+            ),
+            (
+                "Notes",
+                lambda: self._open_history(HistoryPanel.NOTES_TAB),
+                "historique memo",
+            ),
+            ("Me rappeler…", self._open_reminder, "minuteur timer pomodoro"),
+            ("Nouvelle discussion Claude", self._reset_claude, "reset effacer"),
+            (
+                "Masquer / Afficher le sorcier",
+                self._toggle_avatar,
+                "cacher montrer avatar",
+            ),
+            ("Replacer sur la barre", self.avatar.snap_to_taskbar, "position"),
+            (
+                "Recharger la configuration",
+                self.reload_config,
+                "config toml reglages",
+            ),
+            (
+                "Ouvrir le dossier de configuration",
+                self._open_config_folder,
+                "dossier fichiers",
+            ),
+        ]
+        return [
+            Command(
+                title=title, kind="action", run=run, keywords=keywords, order=index
+            )
+            for index, (title, run, keywords) in enumerate(entries)
+        ]
+
+    def _launcher_commands(self) -> list[Command]:
+        return [
+            Command(
+                title=entry.label,
+                kind="launcher",
+                subtitle=entry.target,
+                run=lambda item=entry: self._launch(item),
+                order=100 + index,
+            )
+            for index, entry in enumerate(self.config.launcher)
+        ]
+
+    def _note_commands(self) -> list[Command]:
+        return [
+            Command(
+                title=_one_line(record.body),
+                kind="note",
+                run=lambda body=record.body: self.clipboard.copy_to_clipboard(body),
+                order=200 + index,
+            )
+            for index, record in enumerate(self.storage.list_notes(limit=60))
+        ]
+
+    def _clip_commands(self) -> list[Command]:
+        return [
+            Command(
+                title=_one_line(record.body),
+                kind="clip",
+                run=lambda body=record.body: self.clipboard.copy_to_clipboard(body),
+                order=300 + index,
+            )
+            for index, record in enumerate(self.storage.list_clips(limit=60))
+        ]
 
     def _launch(self, entry) -> None:
         try:
             launch(entry)
         except LaunchError as exc:
-            self.tray.notify(
-                f"Impossible de lancer {entry.label}", str(exc), warning=True
+            self.notify(
+                f"Impossible de lancer {entry.label}", str(exc), kind="warning"
             )
 
     def _toggle_avatar(self) -> None:
@@ -502,17 +629,17 @@ class AvatarApp:
         actual = winapi.autostart_enabled()
         self.tray.set_autostart(actual)
         if actual != enabled:
-            self.tray.notify(
+            self.notify(
                 "Démarrage automatique inchangé",
                 "Windows a refusé la modification de l'entrée de démarrage.",
-                warning=True,
+                kind="warning",
             )
 
     def _open_config_folder(self) -> None:
         try:
             os.startfile(config_dir())  # type: ignore[attr-defined]
         except OSError as exc:
-            self.tray.notify("Impossible d'ouvrir le dossier", str(exc), warning=True)
+            self.notify("Impossible d'ouvrir le dossier", str(exc), kind="warning")
 
     def reload_config(self) -> None:
         """Re-read config.toml and apply what can be applied without a restart."""
@@ -529,18 +656,22 @@ class AvatarApp:
 
         self._report_startup_problems(reloaded=True)
 
+    def notify(self, title: str, body: str = "", kind: str = "info") -> None:
+        """One way to tell the user something, themed and in our control."""
+        self.toasts.show(title, body, kind)
+
     def _report_startup_problems(self, reloaded: bool = False) -> None:
         if not reloaded:
             self._report_rename()
         problems = list(self.config.warnings) + self.hotkeys.failures
         if problems:
-            self.tray.notify(
+            self.notify(
                 "Configuration chargée avec des avertissements",
                 "\n".join(problems[:4]),
-                warning=True,
+                kind="warning",
             )
         elif reloaded:
-            self.tray.notify(
+            self.notify(
                 "Configuration rechargée", "Tous les réglages ont été appliqués."
             )
 
@@ -548,28 +679,34 @@ class AvatarApp:
         """Tell the user what the rename did, once, and only if it did something."""
         summary = self._migration.summary()
         if summary:
-            self.tray.notify(f"Bienvenue dans {APP_NAME}", summary)
+            self.notify(f"Bienvenue dans {APP_NAME}", summary)
         if self._migration.failures:
-            self.tray.notify(
+            self.notify(
                 "Récupération incomplète",
                 "\n".join(self._migration.failures[:3]),
-                warning=True,
+                kind="warning",
             )
         if hooks_installer.is_stale():
             # The hooks point at a script that has moved or been renamed, so
             # every tool call in your terminals is starting a process that dies.
-            self.tray.notify(
+            self.notify(
                 "Hooks à réinstaller",
                 "Les hooks Claude Code pointent vers l'ancien emplacement. "
                 "Choisissez « Installer les hooks Claude Code… » pour les "
                 "remettre à jour.",
-                warning=True,
+                kind="warning",
             )
 
 
 def main(argv: list[str] | None = None) -> int:
     app = AvatarApp(list(argv if argv is not None else sys.argv))
     return app.run()
+
+
+def _one_line(body: str, limit: int = 90) -> str:
+    """Collapse a note or a clipboard entry onto one readable line."""
+    single = " ".join(body.split())
+    return single if len(single) <= limit else single[: limit - 1] + "…"
 
 
 def _tool_detail(tool_input: dict) -> str:

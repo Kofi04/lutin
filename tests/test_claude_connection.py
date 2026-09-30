@@ -319,3 +319,21 @@ def test_a_non_auth_turn_failure_keeps_the_connection(harness):
 
     assert reason != mod.AUTH_HINT
     assert h.session._state == READY
+
+
+def test_shutting_down_mid_handshake_closes_the_client_it_opened(harness):
+    # Prewarm takes seconds. Quitting inside that window used to let the
+    # handshake finish afterwards, publish its client, and leave a CLI
+    # subprocess running with nobody left to disconnect it.
+    client = FakeClient()
+    h = harness(client)
+
+    async def close_then_connect():
+        task = asyncio.ensure_future(h.session._ensure_client())
+        h.session._closing = True
+        return await task
+
+    result = h.run(close_then_connect())
+
+    assert result is None
+    assert h.session._client is None

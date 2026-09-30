@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from .capture import Capture
-from .ui import STYLESHEET, _centre_on_cursor
+from .ui import _centre_on_cursor
 
 _PILL_HEIGHT = 44
 
@@ -50,10 +50,7 @@ class _ContextPill(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedHeight(_PILL_HEIGHT)
-        self.setStyleSheet(
-            "QFrame { background: #0D1117; border: 1px solid #30363D;"
-            " border-radius: 8px; }"
-        )
+        self.setObjectName("card")
 
         self._thumb = QLabel(self)
         self._thumb.setFixedSize(52, 32)
@@ -92,7 +89,6 @@ class AskPanel(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Demander à Claude")
-        self.setStyleSheet(STYLESHEET)
         self.resize(620, 560)
 
         self._capture: Capture | None = None
@@ -229,7 +225,6 @@ class ApprovalCard(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Autorisation")
-        self.setStyleSheet(STYLESHEET)
         self.setMinimumWidth(520)
         # This card holds a Claude Code session open while it waits. Behind the
         # editor it is worse than useless: you would never see it, and the

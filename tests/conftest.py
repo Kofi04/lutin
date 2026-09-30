@@ -15,8 +15,14 @@ import pytest  # noqa: E402
 
 @pytest.fixture(scope="session", autouse=True)
 def qt_app():
-    """One QGuiApplication for the whole session; image codecs need it."""
-    from PySide6.QtGui import QGuiApplication
+    """One QApplication for the whole session.
 
-    app = QGuiApplication.instance() or QGuiApplication([])
+    QApplication rather than QGuiApplication: the image codecs only need the
+    latter, but any test that builds a widget — the palette, the dialogs —
+    needs the former, and QApplication is a subclass, so nothing that worked
+    before stops working.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
     yield app
