@@ -125,6 +125,10 @@ class ClaudeSession(QObject):
     #: (state, detail) - OFFLINE / CONNECTING / READY, plus a reason when there
     #: is one worth giving the user.
     connection_changed = Signal(str, str)
+    #: (job id, text) for a one-shot job; see `run_oneshot`.
+    oneshot_done = Signal(int, str)
+    #: (job id, message fit for the user).
+    oneshot_failed = Signal(int, str)
 
     def __init__(
         self,
@@ -132,9 +136,23 @@ class ClaudeSession(QObject):
         allow_actions: bool = True,
         auto_approve_read_only: bool = True,
         prewarm: bool = True,
+        cwd: str | None = None,
+        system_prompt: str | None = None,
+        overlay: bool = True,
+        memory: str = "",
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
+        #: Working folder; None is wherever the app was started from.
+        self._cwd = cwd
+        #: Replaces the default "answer in a bubble" instructions (agents).
+        self._base_prompt = system_prompt
+        #: Whether this session gets the on-screen pointing tools.
+        self._with_overlay = overlay
+        #: The user's memory.md, appended to the system prompt. Taken in the
+        #: constructor because prewarm connects from here: set afterwards, it
+        #: could arrive after the first connection's prompt was built.
+        self._memory = memory
         self._permission_timeout = permission_timeout
         self._allow_actions = allow_actions
         self._auto_approve_read_only = auto_approve_read_only
@@ -311,6 +329,26 @@ class ClaudeSession(QObject):
         self._frame = None
         asyncio.run_coroutine_threadsafe(self._restart(), self._loop)
 
+    def run_oneshot(self, job_id: int, prompt: str, system_prompt: str) -> None:
+        """Ask one thing outside the conversation, with no tools. GUI-safe.
+
+        Runs beside a turn in progress rather than queueing behind it: it is
+        a separate Claude Code session and shares nothing with this one.
+        """
+        asyncio.run_coroutine_threadsafe(
+            self._oneshot(job_id, prompt, system_prompt), self._loop
+        )
+
+    async def _oneshot(self, job_id: int, prompt: str, system_prompt: str) -> None:
+        from .oneshot import ask_once
+
+        try:
+            text = await ask_once(prompt, system_prompt)
+        except Exception as exc:  # the SDK raises a wide range of errors
+            self.oneshot_failed.emit(job_id, self._explain(exc))
+        else:
+            self.oneshot_done.emit(job_id, text)
+
     def resume(self, session_id: str) -> None:
         """Continue an earlier conversation, picked from the history.
 
@@ -400,7 +438,8 @@ class ClaudeSession(QObject):
         allowed = list(READ_ONLY_TOOLS) if self._auto_approve_read_only else []
         # Drawing on the screen cannot change anything, so asking permission
         # to point at a button would be absurd.
-        allowed += list(OVERLAY_TOOLS)
+        if self._with_overlay:
+            allowed += list(OVERLAY_TOOLS)
         # The SDK warns that `allowed_tools` shadows `can_use_tool`. That is
         # exactly what auto_approve_read_only asks for, so silence it here
         # rather than train the user to ignore warnings.
@@ -417,19 +456,46 @@ class ClaudeSession(QObject):
             # enough. Token-level streaming means parsing raw stream events,
             # and that is not worth the risk for the gain here.
             include_partial_messages=False,
-            mcp_servers={OVERLAY_SERVER: build_overlay_server(
-                self.overlay, lambda: self._frame
-            )},
-            system_prompt=(
-                "Tu réponds dans une petite bulle sur le bureau de l'utilisateur. "
-                "Réponds en français, de façon concise et directe. "
-                "Si on te montre une capture d'écran, décris ce qui compte, "
-                "pas chaque pixel. " + OVERLAY_HINT
+            mcp_servers=(
+                {OVERLAY_SERVER: build_overlay_server(self.overlay, lambda: self._frame)}
+                if self._with_overlay
+                else {}
             ),
+            system_prompt=self._system_prompt(),
+            cwd=self._cwd,
             # Marks sessions Little Wizard started, so the hook bridge can tell them
             # apart from the user's own terminals and stay out of the way.
             env={"WIZARD_OWN_SESSION": "1"},
         )
+
+    def _system_prompt(self) -> str:
+        base = self._base_prompt or (
+            "Tu réponds dans une petite bulle sur le bureau de l'utilisateur. "
+            "Réponds en français, de façon concise et directe. "
+            "Si on te montre une capture d'écran, décris ce qui compte, "
+            "pas chaque pixel. " + OVERLAY_HINT
+        )
+        if not self._memory.strip():
+            return base
+        return (
+            f"{base}\n\n"
+            "Ce que l'utilisateur t'a demandé de retenir sur lui (sa mémoire, "
+            "qu'il a écrite lui-même) :\n"
+            f"<memoire>\n{self._memory.strip()}\n</memoire>"
+        )
+
+    def set_memory(self, text: str) -> None:
+        """Change what Claude knows about the user. GUI-safe.
+
+        The system prompt is fixed per connection, so taking a new memory
+        into account means reconnecting — onto the same session, so the
+        conversation in progress is kept.
+        """
+        if text == self._memory:
+            return
+        self._memory = text
+        if self._client is not None:
+            asyncio.run_coroutine_threadsafe(self._restart(), self._loop)
 
     def _prompt(self, question: str, capture: Capture | None):
         """Build the SDK prompt: a bare string, or a stream carrying an image."""

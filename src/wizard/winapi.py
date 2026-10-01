@@ -355,9 +355,7 @@ def _window_process_name(hwnd: int) -> str:
 
     # LIMITED_INFORMATION is enough for the image name and, unlike
     # PROCESS_QUERY_INFORMATION, does not need elevation for most processes.
-    handle = _kernel32.OpenProcess(
-        _PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value
-    )
+    handle = _kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
     if not handle:
         return ""
     try:
@@ -593,3 +591,106 @@ def exclude_from_capture(hwnd: int, exclude: bool = True) -> bool:
         return bool(_user32.SetWindowDisplayAffinity(wintypes.HWND(hwnd), affinity))
     except (AttributeError, OSError):
         return False
+
+
+# ---------------------------------------------------------------------------
+# Talking to other apps: focus, key presses, the clipboard's sequence number
+# ---------------------------------------------------------------------------
+
+_INPUT_KEYBOARD = 1
+_KEYEVENTF_KEYUP = 0x0002
+_KEYEVENTF_UNICODE = 0x0004
+
+VK_CONTROL = 0x11
+VK_MENU = 0x12  # Alt
+VK_SHIFT = 0x10
+VK_LWIN = 0x5B
+VK_RWIN = 0x5C
+VK_C = 0x43
+VK_V = 0x56
+
+_MODIFIER_VKS = (VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN)
+
+_ULONG_PTR = ctypes.c_size_t
+
+
+class _KEYBDINPUT(ctypes.Structure):
+    _fields_ = [
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", _ULONG_PTR),
+    ]
+
+
+class _MOUSEINPUT(ctypes.Structure):
+    # Only here so the union has the size Windows expects; SendInput rejects
+    # the whole call when cbSize does not match sizeof(INPUT).
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", _ULONG_PTR),
+    ]
+
+
+class _INPUTUNION(ctypes.Union):
+    _fields_ = [("ki", _KEYBDINPUT), ("mi", _MOUSEINPUT)]
+
+
+class _INPUT(ctypes.Structure):
+    _fields_ = [("type", wintypes.DWORD), ("union", _INPUTUNION)]
+
+
+def _key(vk: int = 0, scan: int = 0, flags: int = 0) -> _INPUT:
+    event = _INPUT()
+    event.type = _INPUT_KEYBOARD
+    event.union.ki = _KEYBDINPUT(vk, scan, flags, 0, 0)
+    return event
+
+
+def send_chord(*vks: int) -> bool:
+    """Press the keys in order, then release them in reverse: Ctrl+C, Ctrl+V."""
+    if not IS_WINDOWS or not vks:
+        return False
+    events = [_key(vk) for vk in vks] + [
+        _key(vk, flags=_KEYEVENTF_KEYUP) for vk in reversed(vks)
+    ]
+    array = (_INPUT * len(events))(*events)
+    sent = _user32.SendInput(len(events), array, ctypes.sizeof(_INPUT))
+    return sent == len(events)
+
+
+def modifiers_held() -> bool:
+    """True while Ctrl, Alt, Shift or Win is physically down.
+
+    A global hotkey fires on key-down, with its modifiers still held. Sending
+    Ctrl+C at that moment produces Ctrl+Alt+C — which is this app's own "ask
+    Claude" shortcut. Copying the selection has to wait for this to go False.
+    """
+    if not IS_WINDOWS:
+        return False
+    return any(_user32.GetAsyncKeyState(vk) & 0x8000 for vk in _MODIFIER_VKS)
+
+
+def foreground_window() -> int:
+    if not IS_WINDOWS:
+        return 0
+    return int(_user32.GetForegroundWindow() or 0)
+
+
+def focus_window(hwnd: int) -> bool:
+    """Give focus back to the app the selection came from."""
+    if not IS_WINDOWS or not hwnd:
+        return False
+    return bool(_user32.SetForegroundWindow(wintypes.HWND(hwnd)))
+
+
+def clipboard_sequence() -> int:
+    """Increments on every clipboard change, whoever made it."""
+    if not IS_WINDOWS:
+        return 0
+    return int(_user32.GetClipboardSequenceNumber())

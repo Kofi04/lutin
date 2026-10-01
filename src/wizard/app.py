@@ -15,10 +15,15 @@ import os
 import sys
 from collections import deque
 
-from PySide6.QtCore import QSharedMemory, Qt
+from PySide6.QtCore import QObject, QSharedMemory, Qt, Signal
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from . import winapi
+from .assistant import memory as user_memory
+from .assistant import ocr
+from .assistant import selection as selection_actions
+from .assistant.agents import AgentError, AgentManager
+from .assistant.selection import SelectionBridge
 from .avatar_window import AvatarWindow
 from .branding import (
     APP_NAME,
@@ -44,6 +49,7 @@ from .design import ThemeWatcher, stylesheet
 from .features.clipboard import ClipboardWatcher
 from .features.launcher import LaunchError, launch
 from .features.monitor import SystemMonitor
+from .features.nl_reminder import parse_reminder
 from .features.timers import Reminder, TimerManager
 from .history import CaptureInfo, HistoryStore
 from .hotkeys import GlobalHotkeys
@@ -54,14 +60,23 @@ from .sessions import EVENT_STATES, SessionRegistry, describe
 from .storage import Storage
 from .tray import TrayIcon, app_icon
 from .ui import HistoryPanel, QuickNoteDialog, ReminderDialog
+from .ui_agent import AgentDialog
 from .ui_capture import CapturePreview
 from .ui_claude import ApprovalCard, AskPanel, ToolRequest
 from .ui_history import HistoryWindow
 from .ui_hooks import HookDiffDialog, summarise_backup
 from .ui_onboarding import Check, OnboardingDialog, already_shown, mark_shown
 from .ui_palette import Command, CommandPalette
+from .ui_selection import SelectionResult
+from .ui_sessions import SessionDock
 from .ui_settings import SettingsWindow
 from .ui_toast import ToastManager
+
+
+class _Relay(QObject):
+    """Carries results from worker threads back to the GUI thread."""
+
+    text_read = Signal(str, str)  # (text, error)
 
 
 class AvatarApp:
@@ -73,7 +88,9 @@ class AvatarApp:
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
-        self.qt = QApplication(argv)
+        # Reuse an existing instance (the test suite has one): Qt allows a
+        # single QApplication per process.
+        self.qt = QApplication.instance() or QApplication(argv)
         self.qt.setApplicationName(APP_NAME)
         self.qt.setOrganizationName(ORG_NAME)
         # Without this the dialogs wear the generic Python feather in their
@@ -117,9 +134,19 @@ class AvatarApp:
         self._answer_buffer = ""
         self._history_window: HistoryWindow | None = None
         self._approval_request = None
+        #: One-shot Claude jobs in flight: job id -> what to do with the result.
+        self._jobs: dict[int, tuple] = {}
+        self._relay = _Relay()
+        self._ocr_result = self._relay.text_read
+        self._next_job = 1
+        self._selection_result: SelectionResult | None = None
         self.timers = TimerManager()
         self.monitor = SystemMonitor(self.config.monitor)
         self.clipboard = ClipboardWatcher(self.storage, self.config.clipboard)
+        self.selection = SelectionBridge(
+            hold=self.clipboard.hold, release=self.clipboard.release
+        )
+        self._selection_source = 0
 
         self.avatar = AvatarWindow(self.config.appearance)
         self.tray = TrayIcon(self.config, self.timers)
@@ -132,6 +159,8 @@ class AvatarApp:
         # the avatar is hidden for the instant of each grab instead.
         self.capture.hide_during_capture(self.avatar)
         self.toasts.set_anchor(self.avatar)
+        self.dock = SessionDock(self.avatar)
+        self.capture.hide_during_capture(self.dock)
         self._capture_preview: CapturePreview | None = None
 
         self.claude = ClaudeSession(
@@ -139,6 +168,7 @@ class AvatarApp:
             allow_actions=self.config.claude.allow_actions,
             auto_approve_read_only=self.config.claude.auto_approve_read_only,
             prewarm=self.config.claude.enabled and self.config.claude.prewarm,
+            memory=user_memory.for_prompt(user_memory.load_memory()),
         )
         self._ask_panel: AskPanel | None = None
         self._approval: ApprovalCard | None = None
@@ -151,12 +181,15 @@ class AvatarApp:
 
         self.sessions = SessionRegistry()
         self.sessions.changed.connect(self._refresh_mood)
+        self.agents = AgentManager(self.config.claude.permission_timeout_seconds)
+        self._apply_memory()
+        self._agent_dialog: AgentDialog | None = None
         self._system_mood = Mood.CALM
         self.bridge = HookServer()
         self._hook_dialog: HookDiffDialog | None = None
         # Approvals from the bridge answer a socket, not the SDK, so the
         # queue has to remember which of the two a request came from.
-        self._bridge_requests: set[int] = set()
+        self._approval_owner = None
 
         self._palette: CommandPalette | None = None
         self._settings: SettingsWindow | None = None
@@ -219,6 +252,7 @@ class AvatarApp:
         return self.qt.exec()
 
     def shutdown(self) -> None:
+        self.agents.shutdown()
         self.bridge.stop()
         self.claude.shutdown()
         self.hotkeys.unregister_all()
@@ -266,10 +300,31 @@ class AvatarApp:
         self.claude.reset_answer.connect(self._on_claude_reset)
         self.claude.permission_requested.connect(self._on_permission_requested)
         self.claude.connection_changed.connect(self._on_claude_connection)
+        self.claude.oneshot_done.connect(self._on_job_done)
+        self.sessions.changed.connect(
+            lambda: self.dock.update_sessions(self.sessions.sessions)
+        )
+        self.avatar.position_changed.connect(self.dock.reposition)
+        self.avatar.visibility_changed.connect(
+            lambda visible: self.dock.set_suppressed(not visible)
+        )
+        self.dock.clicked.connect(self._on_dock_clicked)
+        self.capture.text_region.connect(self._read_text)
+        self._ocr_result.connect(self._on_text_read)
+        self.agents.progressed.connect(self._on_agent_progress)
+        self.agents.permission_requested.connect(self._on_agent_permission)
+        self.agents.ended.connect(self._on_agent_ended)
+        self.tray.agent_requested.connect(self._open_agent_dialog)
+        self.claude.oneshot_failed.connect(self._on_job_failed)
+        self.selection.grabbed.connect(self._on_selection_grabbed)
+        self.selection.failed.connect(
+            lambda message: self.notify("Sélection", message, kind="warning")
+        )
         self.claude.overlay.point_requested.connect(self._on_point_requested)
         self.claude.overlay.highlight_requested.connect(self.overlay.highlight)
         self.claude.overlay.steps_requested.connect(self.overlay.show_steps)
         self.claude.overlay.clear_requested.connect(self.overlay.clear)
+        self.claude.overlay.reminder_requested.connect(self._set_reminder)
         self.overlay.escape_hook = self._grab_escape
         self.overlay.surface_created = self.capture.hide_during_capture
         self.overlay.active_changed.connect(self._on_overlay_active)
@@ -311,6 +366,8 @@ class AvatarApp:
         self.hotkeys.register(hotkeys.capture_region, self.capture.start_region)
         self.hotkeys.register(hotkeys.ask_claude, lambda: self._open_ask(None))
         self.hotkeys.register(hotkeys.capture_screen, self.capture.capture_active_screen)
+        self.hotkeys.register(hotkeys.selection_actions, self._start_selection)
+        self.hotkeys.register(hotkeys.copy_text, self._start_text_copy)
 
     # -- actions ----------------------------------------------------------
 
@@ -397,6 +454,244 @@ class AvatarApp:
             self._ask_panel.reset_answer()
             self._ask_panel.set_capture(None)
         self.notify("Claude", "Nouvelle discussion. Règles oubliées.")
+
+    # -- reminders in plain words ----------------------------------------
+
+    def _reminder_commands(self, text: str) -> list[Command]:
+        parsed = parse_reminder(text)
+        if parsed is None:
+            return []
+        return [
+            Command(
+                title=parsed.describe(),
+                kind="action",
+                subtitle="Entrée pour programmer — perdu si l'app est fermée",
+                run=lambda: self._set_reminder(parsed.seconds, parsed.label),
+            )
+        ]
+
+    def _copy_clip_image(self, clip_id: int) -> None:
+        png = self.storage.clip_image(clip_id)
+        if png is not None:
+            self.clipboard.copy_image_to_clipboard(png)
+
+    def _set_reminder(self, seconds: int, label: str) -> None:
+        from .features.nl_reminder import ParsedReminder
+
+        self.timers.add(label, seconds)
+        self.notify(
+            ParsedReminder(seconds, label).describe(),
+            "Gardé en mémoire : perdu si l'app est fermée avant.",
+            kind="success",
+        )
+
+    # -- copying the text in a region (local OCR) -------------------------
+
+    def _start_text_copy(self) -> None:
+        if not ocr.available():
+            self.notify(
+                "Copier le texte",
+                "La reconnaissance de texte n'est pas installée : "
+                'pip install -e ".[ocr]"',
+                kind="warning",
+            )
+            return
+        self.capture.start_text_region()
+
+    def _read_text(self, image) -> None:
+        import threading
+
+        png = ocr.prepare_png(image)
+
+        def work() -> None:
+            try:
+                self._ocr_result.emit(ocr.recognize_png(png), "")
+            except RuntimeError as exc:
+                self._ocr_result.emit("", str(exc))
+
+        threading.Thread(target=work, name="wizard-ocr-job", daemon=True).start()
+
+    def _on_text_read(self, text: str, error: str) -> None:
+        if error:
+            self.notify("Copier le texte", error, kind="warning")
+        elif not text.strip():
+            self.notify("Copier le texte", "Aucun texte reconnu dans cette zone.")
+        else:
+            self.clipboard.copy_to_clipboard(text)
+            self.notify("Texte copié", _one_line(text, 140), kind="success")
+
+    # -- background agents ------------------------------------------------
+
+    def _open_agent_dialog(self) -> None:
+        if not self.config.claude.enabled or not self._check_auth_once():
+            return
+        if self._agent_dialog is None:
+            self._agent_dialog = AgentDialog()
+            self._protect(self._agent_dialog)
+            self._agent_dialog.launched.connect(self._launch_agent)
+        self._agent_dialog.open_dialog()
+
+    def _launch_agent(self, task: str, folder: str) -> None:
+        try:
+            agent = self.agents.start(task, folder)
+        except AgentError as exc:
+            self.notify("Agent", str(exc), kind="warning")
+            return
+        if self.config.history.enabled:
+            agent.conversation_id = self.history.start("agent", project=agent.label)
+            self.history.add_message(
+                agent.conversation_id, "user", f"{task}\n\n(dossier : {agent.folder})"
+            )
+        self.notify("Agent lancé", f"{agent.label} : {_one_line(task, 70)}")
+
+    def _apply_memory(self) -> None:
+        """Hand memory.md to Claude: the main session and new agents."""
+        text = user_memory.for_prompt(user_memory.load_memory())
+        self.claude.set_memory(text)
+        self.agents.memory = text
+
+    def _on_agent_progress(self, agent, state: str, line: str) -> None:
+        self.sessions.record(agent.key, f"Agent · {agent.label}", state, line)
+
+    def _on_agent_permission(self, agent, request_id: int, request) -> None:
+        from dataclasses import replace
+
+        labelled = replace(request, project=f"l'agent « {agent.label} »")
+        self._approval_queue.append((agent.session, request_id, labelled))
+        self._show_next_approval()
+
+    def _on_agent_ended(self, agent) -> None:
+        from PySide6.QtCore import QTimer
+
+        titles = {
+            "done": "Agent terminé",
+            "failed": "Agent en échec",
+            "stopped": "Agent arrêté",
+        }
+        summary = _one_line(agent.report or agent.last_action or "", 160)
+        kind = "warning" if agent.state == "failed" else "success"
+        self.notify(
+            titles.get(agent.state, "Agent"), f"{agent.label} — {summary}", kind=kind
+        )
+        if self.config.history.enabled and agent.conversation_id is not None:
+            role = "error" if agent.state == "failed" else "assistant"
+            if agent.report.strip():
+                self.history.add_message(agent.conversation_id, role, agent.report)
+            if agent.session.session_id:
+                self.history.set_session(agent.conversation_id, agent.session.session_id)
+        # Leave the mini-wizard up long enough to be noticed, then tidy up.
+        QTimer.singleShot(60_000, lambda key=agent.key: self.sessions.forget(key))
+
+    def _on_dock_clicked(self, session_id: str) -> None:
+        from PySide6.QtGui import QCursor
+        from PySide6.QtWidgets import QMenu, QMessageBox
+
+        agent = next((a for a in self.agents.agents if a.key == session_id), None)
+        menu = QMenu()
+        if agent is not None:
+            report = menu.addAction("Voir le compte rendu")
+            stop = menu.addAction("Arrêter l'agent") if agent.running else None
+        else:
+            report = stop = None
+        dismiss = menu.addAction("Retirer")
+        picked = menu.exec(QCursor.pos())
+        if picked is None:
+            return
+        if picked is dismiss:
+            self.sessions.forget(session_id)
+        elif picked is stop and agent is not None:
+            self.agents.stop(agent.id)
+        elif picked is report and agent is not None:
+            QMessageBox.information(
+                None,
+                f"Agent · {agent.label}",
+                agent.report.strip() or "Pas encore de compte rendu.",
+            )
+
+    def _agent_commands(self) -> list[Command]:
+        commands = [
+            Command(
+                title="Lancer un agent…",
+                kind="action",
+                run=self._open_agent_dialog,
+                keywords="tache arriere-plan dossier automatique",
+                order=50,
+            )
+        ]
+        for agent in self.agents.running:
+            commands.append(
+                Command(
+                    title=f"Arrêter l'agent : {_one_line(agent.task, 60)}",
+                    kind="action",
+                    subtitle=agent.last_action,
+                    run=lambda agent_id=agent.id: self.agents.stop(agent_id),
+                    order=51,
+                )
+            )
+        return commands
+
+    # -- actions on the selected text ------------------------------------
+
+    def _start_selection(self) -> None:
+        if not self.config.claude.enabled or not self._check_auth_once():
+            return
+        self.selection.grab()
+
+    def _on_selection_grabbed(self, text: str, source: int) -> None:
+        from PySide6.QtGui import QCursor
+        from PySide6.QtWidgets import QMenu
+
+        menu = QMenu()
+        for chosen in selection_actions.ACTIONS:
+            menu.addAction(chosen.label).setData(chosen.key)
+        picked = menu.exec(QCursor.pos())
+        if picked is None:
+            return
+        chosen = selection_actions.action(picked.data())
+        if self._selection_result is None:
+            self._selection_result = SelectionResult()
+            self._protect(self._selection_result)
+            self._selection_result.replace_requested.connect(
+                lambda result: self.selection.replace(self._selection_source, result)
+            )
+            self._selection_result.copy_requested.connect(
+                self.clipboard.copy_to_clipboard
+            )
+        self._selection_source = source
+        self._selection_result.start(chosen, text)
+        self._run_job(
+            ("selection", chosen, text),
+            selection_actions.build_prompt(chosen, text),
+            selection_actions.SYSTEM_PROMPT,
+        )
+
+    def _run_job(self, purpose: tuple, prompt: str, system_prompt: str) -> None:
+        job_id, self._next_job = self._next_job, self._next_job + 1
+        self._jobs[job_id] = purpose
+        self.claude.run_oneshot(job_id, prompt, system_prompt)
+
+    def _on_job_done(self, job_id: int, text: str) -> None:
+        purpose = self._jobs.pop(job_id, None)
+        if purpose is None:
+            return
+        if purpose[0] == "selection":
+            _, chosen, original = purpose
+            result = selection_actions.clean_result(text)
+            if self._selection_result is not None:
+                self._selection_result.show_result(result)
+            if self.config.history.enabled:
+                cid = self.history.start("selection", chosen.label)
+                self.history.add_message(cid, "user", original)
+                self.history.add_message(cid, "assistant", result)
+
+    def _on_job_failed(self, job_id: int, message: str) -> None:
+        purpose = self._jobs.pop(job_id, None)
+        if purpose is None:
+            return
+        if purpose[0] == "selection" and self._selection_result is not None:
+            self._selection_result.show_error(message)
+        else:
+            self.notify("Claude", message, kind="warning")
 
     def _record_answer(self, role: str, body: str) -> None:
         """Store Claude's side of the turn, and the session id to resume it."""
@@ -494,7 +789,7 @@ class AvatarApp:
             self.notify("Claude", detail, kind="warning")
 
     def _on_permission_requested(self, request_id: int, request) -> None:
-        self._approval_queue.append((request_id, request))
+        self._approval_queue.append((self.claude, request_id, request))
         self._show_next_approval()
 
     def _show_next_approval(self) -> None:
@@ -506,8 +801,12 @@ class AvatarApp:
             self._protect(self._approval)
             self._approval.decided.connect(self._on_approval_decided)
 
-        request_id, request = self._approval_queue.popleft()
+        # Each entry carries its owner: the main session, an agent's session,
+        # or the hook bridge. They number their requests independently, so
+        # an id alone does not say who is waiting for the answer.
+        owner, request_id, request = self._approval_queue.popleft()
         self._approval_current = request_id
+        self._approval_owner = owner
         self._approval_request = request
         self._approval.ask(request, self.config.claude.permission_timeout_seconds)
 
@@ -517,11 +816,13 @@ class AvatarApp:
             self._show_next_approval()
             return
 
-        if request_id in self._bridge_requests:
-            self._bridge_requests.discard(request_id)
+        owner, self._approval_owner = self._approval_owner, None
+        if owner == "bridge":
             # "always" has no equivalent in the hook protocol: allow once, and
             # remember the rule on our side for the next identical request.
             self.bridge.answer(request_id, "allow" if decision != "deny" else "deny")
+        elif owner is not self.claude and owner is not None:
+            owner.answer_permission(request_id, decision)
         else:
             self.claude.answer_permission(request_id, decision)
             # Only our own sessions go in our history; external ones have
@@ -553,9 +854,9 @@ class AvatarApp:
 
     def _on_bridge_decision(self, request_id: int, event) -> None:
         self.sessions.record(event.session_id, event.project, "waiting", describe(event))
-        self._bridge_requests.add(request_id)
         self._approval_queue.append(
             (
+                "bridge",
                 request_id,
                 ToolRequest(
                     tool=event.tool_name or "un outil",
@@ -607,6 +908,7 @@ class AvatarApp:
         if self._history is None:
             self._history = HistoryPanel(self.storage)
             self._history.copy_requested.connect(self.clipboard.copy_to_clipboard)
+            self._history.copy_image_requested.connect(self._copy_clip_image)
         self._history.open_at(tab)
 
     def _refresh_history(self) -> None:
@@ -761,6 +1063,8 @@ class AvatarApp:
                 )
             )
             self._palette.add_source("actions", self._action_commands)
+            self._palette.add_source("agents", self._agent_commands)
+            self._palette.add_dynamic(self._reminder_commands)
             self._palette.add_source("launchers", self._launcher_commands)
             self._palette.add_source("notes", self._note_commands)
             self._palette.add_source("clips", self._clip_commands)
@@ -839,7 +1143,13 @@ class AvatarApp:
             Command(
                 title=_one_line(record.body),
                 kind="clip",
-                run=lambda body=record.body: self.clipboard.copy_to_clipboard(body),
+                # An image row's body is only its label; copying that text
+                # instead of the picture would be a quiet wrong answer.
+                run=(
+                    (lambda clip_id=record.id: self._copy_clip_image(clip_id))
+                    if record.kind == "image"
+                    else (lambda body=record.body: self.clipboard.copy_to_clipboard(body))
+                ),
                 order=300 + index,
             )
             for index, record in enumerate(self.storage.list_clips(limit=60))
@@ -879,6 +1189,7 @@ class AvatarApp:
 
         self.avatar.apply_appearance(self.config.appearance)
         self._protect_all()
+        self._apply_memory()
         self.monitor.apply_settings(self.config.monitor)
         self.clipboard.apply_settings(self.config.clipboard)
         self.tray.apply_config(self.config)

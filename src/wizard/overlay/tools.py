@@ -33,7 +33,7 @@ from .scene import Highlight, Pointer, Step
 #: The MCP server name. Tools are exposed to Claude as mcp__<SERVER>__<tool>.
 SERVER = "wizard"
 
-TOOL_NAMES = ("point_at", "highlight", "show_steps", "clear_overlay")
+TOOL_NAMES = ("point_at", "highlight", "show_steps", "clear_overlay", "set_reminder")
 
 #: Fully qualified, for `allowed_tools`.
 QUALIFIED = tuple(f"mcp__{SERVER}__{name}" for name in TOOL_NAMES)
@@ -57,6 +57,8 @@ class OverlayBridge(QObject):
     highlight_requested = Signal(float, float, float, float, str, str)
     steps_requested = Signal(object)  # list[Step]
     clear_requested = Signal()
+    #: (seconds, label) — a reminder Claude was asked to set.
+    reminder_requested = Signal(int, str)
 
 
 def _text(message: str, error: bool = False) -> dict:
@@ -115,8 +117,12 @@ def build_handlers(
         if shape not in ("rect", "ellipse"):
             shape = "rect"
         bridge.highlight_requested.emit(
-            rect.left, rect.top, rect.width, rect.height,
-            str(args.get("label", "")), shape,
+            rect.left,
+            rect.top,
+            rect.width,
+            rect.height,
+            str(args.get("label", "")),
+            shape,
         )
         return _text("Zone mise en évidence.")
 
@@ -146,11 +152,28 @@ def build_handlers(
         bridge.clear_requested.emit()
         return _text("Écran nettoyé.")
 
+    async def set_reminder(args: dict) -> dict:
+        try:
+            seconds = round(float(args["minutes"]) * 60)
+        except (KeyError, TypeError, ValueError):
+            return _text("Durée invalide.", error=True)
+        if seconds < 1 or seconds > 7 * 24 * 3600:
+            return _text("La durée doit aller d'une seconde à une semaine.", error=True)
+        label = str(args.get("label", "")).strip()[:200] or "Rappel"
+        bridge.reminder_requested.emit(seconds, label)
+        # Said back to Claude so it can say it to the user: these do not
+        # survive closing the app.
+        return _text(
+            "Rappel programmé. Il est gardé en mémoire : il sera perdu si "
+            "l'application est fermée avant."
+        )
+
     return {
         "point_at": point_at,
         "highlight": highlight,
         "show_steps": show_steps,
         "clear_overlay": clear_overlay,
+        "set_reminder": set_reminder,
     }
 
 
@@ -252,5 +275,19 @@ def build_server(bridge: OverlayBridge, current_frame):
             "Efface tout ce qui est affiché sur l'écran.",
             {"type": "object", "properties": {}},
         )(handlers["clear_overlay"]),
+        tool(
+            "set_reminder",
+            "Programme un rappel pour l'utilisateur dans un certain nombre de "
+            "minutes (une notification s'affichera). Gardé en mémoire seulement : "
+            "perdu si l'application est fermée.",
+            {
+                "type": "object",
+                "properties": {
+                    "minutes": {"type": "number", "exclusiveMinimum": 0},
+                    "label": {"type": "string"},
+                },
+                "required": ["minutes"],
+            },
+        )(handlers["set_reminder"]),
     ]
     return create_sdk_mcp_server(SERVER, tools=tools)

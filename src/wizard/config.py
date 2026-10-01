@@ -57,6 +57,8 @@ class Hotkeys:
     capture_region: str = "ctrl+alt+S"
     ask_claude: str = "ctrl+alt+C"
     capture_screen: str = "ctrl+alt+E"
+    selection_actions: str = "ctrl+alt+T"
+    copy_text: str = "ctrl+alt+O"
 
 
 @dataclass
@@ -109,6 +111,10 @@ class ClipboardSettings:
     enabled: bool = True
     max_entries: int = 200
     max_text_length: int = 20_000
+    # Copied images too (screenshots, pictures). Off by itself if you never
+    # want a picture of your screen kept on disk.
+    images: bool = True
+    max_images: int = 30
 
 
 @dataclass
@@ -253,6 +259,7 @@ def load_config(path: Path | None = None) -> Config:
     config.appearance.opacity = min(max(config.appearance.opacity, 0.2), 1.0)
     config.monitor.interval_seconds = min(max(config.monitor.interval_seconds, 0.5), 60.0)
     config.clipboard.max_entries = min(max(config.clipboard.max_entries, 10), 5000)
+    config.clipboard.max_images = min(max(config.clipboard.max_images, 0), 200)
     config.ui.overlay_seconds = min(max(config.ui.overlay_seconds, 2.0), 120.0)
     config.history.retention_days = max(config.history.retention_days, 0)
     config.claude.permission_timeout_seconds = min(

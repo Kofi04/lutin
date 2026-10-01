@@ -47,6 +47,10 @@ class AvatarWindow(QWidget):
     clicked = Signal()
     context_menu_requested = Signal(QPoint)
     moved_by_user = Signal()
+    #: Any move at all — a drag, a snap, a flight — so companions can follow.
+    position_changed = Signal()
+    #: Shown or hidden, by the user, by full-screen quiet mode, or by capture.
+    visibility_changed = Signal(bool)
 
     #: Ctrl+drag: the controller looks up the window under the cursor and shows
     #: the halo. The avatar itself knows nothing about windows or captures.
@@ -76,9 +80,8 @@ class AvatarWindow(QWidget):
         self._animator = Animator()
         self._renderer = load_renderer()
         self._frame = self._animator.advance(0.0)
-        self._settings = QSettings(
-            str(state_path()), QSettings.Format.IniFormat
-        )
+        self._last_key = None
+        self._settings = QSettings(str(state_path()), QSettings.Format.IniFormat)
 
         self._drag_origin: QPoint | None = None
         self._dragged = False
@@ -178,14 +181,20 @@ class AvatarWindow(QWidget):
 
     # -- Qt overrides -----------------------------------------------------
 
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self.position_changed.emit()
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        self.visibility_changed.emit(True)
         self._timer.start()
 
     def hideEvent(self, event) -> None:
         # No point animating a window nobody can see.
         self._timer.stop()
         super().hideEvent(event)
+        self.visibility_changed.emit(False)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -312,6 +321,14 @@ class AvatarWindow(QWidget):
         if self._frame.hovered:
             self._animator.set_look(*self._look_direction())
         self._frame = self._animator.advance(self._timer.interval() / 1000.0)
+        # Skip the repaint when the frame would look the same on screen; see
+        # PainterRenderer.visual_key. Renderers without one always repaint.
+        key_of = getattr(self._renderer, "visual_key", None)
+        side = float(min(self.width(), self.height()))
+        key = key_of(self._frame, side) if key_of else None
+        if key is not None and key == self._last_key:
+            return
+        self._last_key = key
         self.update()
 
     def _look_direction(self) -> tuple[float, float]:

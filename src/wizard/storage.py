@@ -20,6 +20,10 @@ class Record:
     id: int
     body: str
     created_at: datetime
+    #: "text" or "image" (clips only; notes are always text).
+    kind: str = "text"
+    #: A small PNG preview, for image clips.
+    thumbnail: bytes | None = None
 
 
 def _now() -> str:
@@ -97,9 +101,9 @@ class Storage:
             return None
 
         latest = self._conn.execute(
-            "SELECT body FROM clips ORDER BY id DESC LIMIT 1"
+            "SELECT body, kind FROM clips ORDER BY id DESC LIMIT 1"
         ).fetchone()
-        if latest is not None and latest["body"] == body:
+        if latest is not None and latest["kind"] == "text" and latest["body"] == body:
             return None
 
         cursor = self._conn.execute(
@@ -108,6 +112,49 @@ class Storage:
         self._prune_clips(max_entries)
         self._conn.commit()
         return int(cursor.lastrowid)
+
+    def add_image_clip(
+        self,
+        png: bytes,
+        thumbnail: bytes,
+        width: int,
+        height: int,
+        max_entries: int = 200,
+        max_images: int = 30,
+    ) -> int | None:
+        """Record a copied image, skipping an immediate repeat.
+
+        Images are pruned on their own, tighter limit: a screenshot is a
+        megabyte where a text clip is a few hundred bytes, and two hundred
+        of them would quietly make the database the largest file around.
+        """
+        if not png:
+            return None
+        latest = self._conn.execute(
+            "SELECT kind, image FROM clips ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if latest is not None and latest["kind"] == "image" and latest["image"] == png:
+            return None
+        cursor = self._conn.execute(
+            "INSERT INTO clips (body, created_at, kind, image, thumbnail)"
+            " VALUES (?, ?, 'image', ?, ?)",
+            (f"Image {width}×{height}", _now(), png, thumbnail),
+        )
+        self._conn.execute(
+            "DELETE FROM clips WHERE kind = 'image' AND id NOT IN ("
+            "  SELECT id FROM clips WHERE kind = 'image' ORDER BY id DESC LIMIT ?"
+            ")",
+            (max(0, max_images),),
+        )
+        self._prune_clips(max_entries)
+        self._conn.commit()
+        return int(cursor.lastrowid)
+
+    def clip_image(self, clip_id: int) -> bytes | None:
+        row = self._conn.execute(
+            "SELECT image FROM clips WHERE id = ? AND kind = 'image'", (clip_id,)
+        ).fetchone()
+        return bytes(row["image"]) if row and row["image"] is not None else None
 
     def list_clips(self, limit: int = 50, search: str | None = None) -> list[Record]:
         return self._list("clips", limit, search)
@@ -135,7 +182,8 @@ class Storage:
         # `table` is never user input: it is one of two literals from this
         # module, so interpolating it cannot introduce injection.
         assert table in ("notes", "clips")
-        sql = f"SELECT id, body, created_at FROM {table}"
+        extra = ", kind, thumbnail" if table == "clips" else ""
+        sql = f"SELECT id, body, created_at{extra} FROM {table}"
         params: list[object] = []
         if search:
             sql += " WHERE body LIKE ? ESCAPE '\\'"
@@ -146,7 +194,11 @@ class Storage:
         rows = self._conn.execute(sql, params).fetchall()
         return [
             Record(
-                id=row["id"], body=row["body"], created_at=_parse_time(row["created_at"])
+                id=row["id"],
+                body=row["body"],
+                created_at=_parse_time(row["created_at"]),
+                kind=row["kind"] if table == "clips" else "text",
+                thumbnail=row["thumbnail"] if table == "clips" else None,
             )
             for row in rows
         ]

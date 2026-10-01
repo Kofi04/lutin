@@ -127,6 +127,8 @@ class HistoryPanel(QDialog):
     NOTES_TAB = 1
 
     copy_requested = Signal(str)
+    #: A stored image clip to put back on the clipboard (its row id).
+    copy_image_requested = Signal(int)
 
     def __init__(self, storage: Storage, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -212,6 +214,13 @@ class HistoryPanel(QDialog):
             )
             item.setData(Qt.ItemDataRole.UserRole, record.id)
             item.setData(Qt.ItemDataRole.UserRole + 1, record.body)
+            item.setData(Qt.ItemDataRole.UserRole + 2, record.kind)
+            if record.thumbnail:
+                from PySide6.QtGui import QIcon, QPixmap
+
+                pixmap = QPixmap()
+                if pixmap.loadFromData(record.thumbnail, "PNG"):
+                    item.setIcon(QIcon(pixmap))
             item.setToolTip(record.body[:2000])
             widget.addItem(item)
             if record.id == selected_id:
@@ -231,6 +240,11 @@ class HistoryPanel(QDialog):
         return item.data(Qt.ItemDataRole.UserRole + 1)
 
     def _copy_selected(self) -> None:
+        item = self._current_list().currentItem()
+        if item is not None and item.data(Qt.ItemDataRole.UserRole + 2) == "image":
+            self.copy_image_requested.emit(item.data(Qt.ItemDataRole.UserRole))
+            self._status.setText("Image copiée")
+            return
         body = self._selected_body()
         if body is not None:
             self.copy_requested.emit(body)

@@ -34,6 +34,8 @@ class CaptureController(QObject):
     captured = Signal(object)  # Capture
     #: Something went wrong, with a message fit for a tray notification.
     failed = Signal(str)
+    #: A region grabbed for reading its text: full resolution, never sent.
+    text_region = Signal(object)  # QImage
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -64,10 +66,30 @@ class CaptureController(QObject):
 
     def start_region(self) -> None:
         if not self._selector.active:
+            self._for_text = False
+            self._selector.start()
+
+    def start_text_region(self) -> None:
+        """Select a region to read its text locally, not to show Claude."""
+        if not self._selector.active:
+            self._for_text = True
             self._selector.start()
 
     def _on_region_selected(self, rect: QRect) -> None:
+        if getattr(self, "_for_text", False):
+            self._for_text = False
+            self._cloak.around(lambda: self._grab_text(rect))
+            return
         self._cloak.around(lambda: self._grab_region(rect))
+
+    def _grab_text(self, rect: QRect) -> None:
+        # Full resolution on purpose: the 1568 px downscale that suits
+        # Claude would blur small interface text past what OCR can read.
+        image = grab_rect(rect)
+        if image is None or image.isNull():
+            self.failed.emit("Impossible de capturer cette zone.")
+            return
+        self.text_region.emit(image)
 
     def _grab_region(self, rect: QRect) -> None:
         image = grab_rect(rect)
@@ -88,8 +110,7 @@ class CaptureController(QObject):
         from PySide6.QtGui import QCursor, QGuiApplication
 
         screen = (
-            QGuiApplication.screenAt(QCursor.pos())
-            or QGuiApplication.primaryScreen()
+            QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
         )
         if screen is None:
             self.failed.emit("Aucun écran disponible.")
@@ -185,6 +206,4 @@ class CaptureController(QObject):
 
 def _region_of(rect: QRect) -> tuple[float, float, float, float]:
     """A logical QRect as the plain tuple the mapping layer works in."""
-    return (
-        float(rect.x()), float(rect.y()), float(rect.width()), float(rect.height())
-    )
+    return (float(rect.x()), float(rect.y()), float(rect.width()), float(rect.height()))

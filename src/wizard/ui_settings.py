@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QTabWidget,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .assistant import memory
 from .config import Config, config_path, load_config
 from .config_writer import Edit, write_edits
 from .hotkey_spec import find_conflicts, invalid_bindings, spec_from_qt
@@ -41,6 +43,8 @@ HOTKEY_LABELS: dict[str, str] = {
     "ask_claude": "Demander à Claude",
     "capture_region": "Montrer une zone",
     "capture_screen": "Montrer tout l'écran",
+    "selection_actions": "Actions sur la sélection",
+    "copy_text": "Copier le texte d'une zone",
     "launcher": "Palette de commandes",
     "quick_note": "Note rapide",
     "clipboard": "Presse-papiers",
@@ -170,6 +174,7 @@ class SettingsWindow(QDialog):
         self._tabs.addTab(self._hotkeys_tab(config), "Raccourcis")
         self._tabs.addTab(self._claude_tab(config), "Claude")
         self._tabs.addTab(self._system_tab(config), "Système")
+        self._tabs.addTab(self._memory_tab(), "Mémoire")
 
         for field in self._fields:
             self._original[(field.section, field.key)] = field.value()
@@ -266,6 +271,46 @@ class SettingsWindow(QDialog):
         )
         return page
 
+    def _memory_tab(self) -> QWidget:
+        page = QWidget()
+        column = QVBoxLayout(page)
+        intro = QLabel(
+            "Ce que Claude doit savoir sur vous : vos préférences, votre "
+            "contexte, votre façon de travailler. C'est envoyé avec chaque "
+            "question — n'y mettez rien de secret."
+        )
+        intro.setWordWrap(True)
+        intro.setObjectName("hint")
+        self._memory_edit = QPlainTextEdit()
+        self._memory_original = memory.load_memory()
+        self._memory_edit.setPlainText(self._memory_original or memory.TEMPLATE)
+        self._memory_note = QLabel("")
+        self._memory_note.setObjectName("caption")
+        self._memory_edit.textChanged.connect(self._update_memory_note)
+        column.addWidget(intro)
+        column.addWidget(self._memory_edit, 1)
+        column.addWidget(self._memory_note)
+        self._update_memory_note()
+        return page
+
+    def _update_memory_note(self) -> None:
+        text = self._memory_edit.toPlainText()
+        sent = len(memory.for_prompt(text))
+        if memory.is_truncated(text):
+            self._memory_note.setText(
+                f"Trop long : seuls les {memory.MAX_MEMORY} premiers caractères "
+                "seront envoyés."
+            )
+        else:
+            self._memory_note.setText(f"{sent} caractères envoyés à Claude.")
+
+    def memory_changed(self) -> bool:
+        text = self._memory_edit.toPlainText()
+        # The untouched template is not a memory worth creating a file for.
+        if not self._memory_original and text == memory.TEMPLATE:
+            return False
+        return text != self._memory_original
+
     def _system_tab(self, config: Config) -> QWidget:
         page, form = self._form()
         clipboard = QCheckBox("Enregistrer l'historique du presse-papiers")
@@ -339,6 +384,13 @@ class SettingsWindow(QDialog):
         if not self._validate():
             return
         edits = self.changes()
+        if self.memory_changed():
+            try:
+                memory.save_memory(self._memory_edit.toPlainText())
+            except OSError as exc:
+                self._problem.setText(f"Impossible d'enregistrer la mémoire : {exc}")
+                self._problem.show()
+                return
         if edits:
             try:
                 write_edits(config_path(), edits)

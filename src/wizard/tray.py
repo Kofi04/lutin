@@ -80,6 +80,7 @@ class TrayIcon(QObject):
     reload_config_requested = Signal()
     settings_requested = Signal()
     history_requested = Signal()
+    agent_requested = Signal()
     open_config_folder_requested = Signal()
     autostart_toggled = Signal(bool)
     clipboard_capture_toggled = Signal(bool)
@@ -281,6 +282,7 @@ class TrayIcon(QObject):
         menu.addAction("Nouvelle discussion Claude").triggered.connect(
             self.reset_claude_requested.emit
         )
+        menu.addAction("Lancer un agent…").triggered.connect(self.agent_requested.emit)
         menu.addAction("Historique des discussions…").triggered.connect(
             self.history_requested.emit
         )

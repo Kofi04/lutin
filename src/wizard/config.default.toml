@@ -23,6 +23,8 @@ toggle_avatar = "ctrl+alt+A"
 capture_region = "ctrl+alt+S"   # sélectionner une zone de l'écran à montrer
 ask_claude = "ctrl+alt+C"       # ouvrir la discussion avec Claude
 capture_screen = "ctrl+alt+E"   # montrer tout l'écran actif, sans sélection
+selection_actions = "ctrl+alt+T" # traduire, corriger, résumer le texte sélectionné
+copy_text = "ctrl+alt+O"        # copier le texte d'une zone de l'écran (OCR local)
 
 # Pour montrer une fenêtre entière : Ctrl + glisser le sorcier dessus.
 # Pour montrer une image : la déposer sur le sorcier.
@@ -77,6 +79,8 @@ retention_days = 0
 enabled = true
 max_entries = 200        # les entrées plus anciennes sont purgées automatiquement
 max_text_length = 20000  # ignorer les textes plus longs (évite de stocker de gros collages)
+images = true           # garder aussi les images copiées (captures, photos)
+max_images = 30         # au-delà, les plus anciennes sont supprimées
 
 # Entrées du lanceur. « target » accepte tout ce que la boîte Exécuter accepte :
 # un exécutable, un document, un dossier, un raccourci shell: ou une URL.

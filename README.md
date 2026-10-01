@@ -73,6 +73,10 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
 | Ask Claude | `Ctrl+Alt+C` | *Demander à Claude…* |
 | Show a screen region | `Ctrl+Alt+S` | *Montrer une zone…* |
 | Show the whole active screen | `Ctrl+Alt+E` | — |
+| Act on the selected text (translate, fix, summarise…) | `Ctrl+Alt+T` | — |
+| Copy the text in a screen region (local OCR) | `Ctrl+Alt+O` | — |
+| Launch a background agent | — | *Lancer un agent…* |
+| Conversation history | — | *Historique des discussions…* |
 | Show a window | `Ctrl`+drag the avatar onto it | — |
 | Show an image | drop the file on the avatar | — |
 | Quick note | `Ctrl+Alt+N` | *Note rapide* |
@@ -200,6 +204,7 @@ What is stored, all of it on your machine, in `%APPDATA%\LittleWizard\`:
   `history.retention_days`, or wipe it with *Tout effacer…* in the History
   window.
 - `state.ini` — the avatar's last position
+- `memory.md` — what you asked Claude to remember about you, if you wrote one
 
 `%APPDATA%\Lutin\` may also still exist: it is the pre-rename folder, kept as a
 backup, plus a `.migrated-to-LittleWizard` marker. Nothing reads it after the
@@ -209,7 +214,13 @@ first start.
 attach one, the capture — to Anthropic, through the Claude Code CLI you are
 already signed in to. That is the whole point of the feature, and it is the only
 network traffic this app causes: there is no telemetry, no analytics and no
-other endpoint. Two guarantees around it:
+other endpoint. Three more things are sent, each only because you asked:
+
+- **`memory.md`**, with every question, if you wrote one.
+- **The selected text**, when you use an action on a selection.
+- **A background agent's task** and whatever it reads in the folder you gave it.
+
+Local OCR sends nothing. Two guarantees around captures:
 
 - **No capture is ever sent without you seeing it first**, in a confirmation
   window that shows exactly the image that will go. There is deliberately no
@@ -219,7 +230,9 @@ other endpoint. Two guarantees around it:
 
 Since clipboard history captures whatever you copy — passwords included — turn
 **Enregistrer le presse-papiers** off in the tray menu before copying secrets, or
-set `clipboard.enabled = false`. A screenshot carries the same risk over a wider
+set `clipboard.enabled = false`. **Copied images are kept too** (screenshots
+included) — `clipboard.images = false` stops that while keeping text. A
+screenshot carries the same risk over a wider
 area: displayed passwords, private messages, client data. Check the preview.
 
 The History window's *Mes sessions Claude Code* view **reads** the transcripts
@@ -241,6 +254,57 @@ The suite covers the logic that is worth protecting and does not need a
 display: config parsing and clamping, SQLite behaviour (dedup, pruning, LIKE
 escaping), the mood thresholds, the hotkey/duration parsers, image sizing,
 the hook framing and settings.json surgery, and the rename migration.
+
+## Assistant features
+
+**Actions on the selected text** (`Ctrl+Alt+T`) — in any application: pick
+*Traduire en anglais / en français, Reformuler, Corriger, Résumer* or
+*Expliquer*. The result opens in a small window, editable, with *Remplacer la
+sélection* (pasted back into the app it came from) or *Copier*. There is no API
+for another app's selection, so it does what a person would — Ctrl+C, then
+Ctrl+V — with three precautions: it waits for you to release the shortcut's
+keys (Ctrl+C sent while Ctrl+Alt are still down is Ctrl+Alt+C, this app's own
+"ask Claude" shortcut); it watches the clipboard's sequence number rather than
+its text, so a selection identical to what was already copied is still seen;
+and it snapshots every clipboard format and **puts your clipboard back**
+afterwards, rich text and images included, without any of it landing in the
+clipboard history. The job runs as its own one-question Claude session **with
+no tools**: selected text can be someone else's email containing instructions,
+and a job that can only return text cannot be talked into anything else. It
+never touches the conversation in the answer panel.
+
+**Background agents** (*Lancer un agent…*) — a task and a folder; the agent
+works in its own Claude Code session, every action still goes through the
+approval card (the card says which agent is asking), and a toast reports when
+it is done. At most three run at once. Each one — and each of your own Claude
+Code sessions seen through the hooks — gets a **mini-wizard** beside the main
+one, in the pose of its state (working, waiting for you, done, failed), ringed
+in its colour; hover for its last actions, click to read the report or stop it.
+They are drawn once per change, never animated, so they cost nothing at rest.
+
+**Memory** (*Paramètres → Mémoire*) — a `memory.md` in the config folder,
+added to Claude's instructions: how you like to be answered, what you work on.
+Capped at 6,000 characters in what is sent (the file itself is never cut), and
+HTML comments are not sent.
+
+**Copy the text in a region** (`Ctrl+Alt+O`) — Windows' own OCR, on the
+machine: nothing is sent, nothing is billed. French and English here. The
+region is read at full resolution (the downscale meant for Claude would blur
+small interface text) and doubled when small. One trap worth recording: called
+on the GUI thread, the WinRT calls **deadlock** — Qt makes that thread a COM
+single-threaded apartment, WinRT delivers completions there as window messages,
+and nothing pumps them. They always run on a thread of their own.
+
+**Reminders in plain words** — type *rappelle-moi dans 20 minutes d'appeler
+Koffi* in the command palette and it becomes the top suggestion; *dans une
+heure et demie*, *dans un quart d'heure*, *à 15h30* work too. Claude can set one
+with its `set_reminder` tool. Reminders still live **in memory**: closing the
+app loses them, and every message that creates one says so.
+
+**Images in the clipboard history** — copied pictures and screenshots are kept
+too, with a thumbnail, and can be copied back. They are capped (2,560 px on the
+long edge, 30 kept by default) because a screenshot weighs what two hundred
+text clips do.
 
 ## Conversation history
 
@@ -495,6 +559,12 @@ src/wizard/
   history.py        conversations, messages, thumbnails, FTS5 search
   claude_transcripts.py  read-only access to ~/.claude/projects
   ui_history.py     the History window
+  assistant/        selection actions, agents, memory, local OCR
+  claude/oneshot.py one tool-less question outside the conversation
+  ui_selection.py   the result window for selection actions
+  ui_sessions.py    mini-wizards, one per session or agent
+  ui_agent.py       launching an agent
+  features/nl_reminder.py  "rappelle-moi dans 20 minutes…"
   avatar_window.py  the frameless translucent always-on-top window
   hotkeys.py        RegisterHotKey bridged into Qt via a native event filter
   tray.py           tray icon and menu
@@ -544,3 +614,12 @@ Decisions worth knowing about:
   either PyInstaller ships one or you build the app on 3.12/3.13. The command
   itself is correct; it is the tool that is missing.
 - There is no CI. The tests and the linter are run by hand.
+- **Idle CPU is about 1 % of one core**, measured over 30 s windows after
+  startup, and noisier on a loaded machine (one run at 3 %). Most of it is
+  redrawing the avatar; frames that would look the same on screen are skipped,
+  and the complete figure is cached so a breathing frame is a single blit.
+- Quitting within the first seconds, while the Claude connection is still
+  being made, takes about 4 seconds: starting the Claude Code process cannot be
+  cancelled instantly. Nothing is left running afterwards (checked).
+- Selection actions start a Claude Code process per request, so expect a few
+  seconds before the result.

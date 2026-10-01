@@ -86,6 +86,26 @@ _UNCACHEABLE = frozenset({Emote.GREETING, Emote.POINTING})
 #: sizes) while bounding the memory a long-running process holds.
 _CACHE_LIMIT = 48
 
+#: Complete figures: blink steps x light-pulse steps for the current pose,
+#: plus a few for hovering. Small pixmaps; evicted oldest first.
+_FIGURE_CACHE_LIMIT = 96
+
+
+#: Poses with a prop or a mouth that moves every frame: never skipped.
+_ALWAYS_MOVING = frozenset(
+    {
+        Emote.THINKING,
+        Emote.WAITING_APPROVAL,
+        Emote.SLEEPING,
+        Emote.TIRED,
+        Emote.SUCCESS,
+        Emote.CONFUSED,
+        Emote.GREETING,
+        Emote.LISTENING,
+        Emote.SPEAKING,
+    }
+)
+
 
 class PainterRenderer:
     """Draws the wizard from code. No assets required.
@@ -100,10 +120,44 @@ class PainterRenderer:
 
     def __init__(self) -> None:
         self._cache: dict[tuple, QPixmap] = {}
+        self._figures: dict[tuple, QPixmap] = {}
 
     @property
     def name(self) -> str:
         return "painter"
+
+    def visual_key(self, frame: Frame, size: float):
+        """What this frame looks like, coarsely, or None if it must be drawn.
+
+        At idle the bob moves the whole character by under two pixels, so
+        most consecutive frames are identical once rounded to the screen —
+        and drawing them anyway was most of the app's idle CPU (measured:
+        about 2 ms of QPainter work per frame, 10 frames a second). Equal
+        keys mean the frame can be skipped. Poses with something moving
+        continuously (orbiting stars, rising z's, a talking mouth) return
+        None and are always drawn.
+        """
+        if frame.emote in _ALWAYS_MOVING:
+            return None
+        if frame.previous is not None and frame.blend < 1.0:
+            return None
+        scale = size / BASE_SIZE
+        bob, squash = _bounce(frame)
+        return (
+            frame.emote,
+            round(bob * scale * 2),  # half-pixel steps on screen
+            round((squash - 1.0) * size * 2),  # its effect on height, in half pixels
+            round(frame.eye_open, 1),
+            round(frame.look[0], 1),
+            round(frame.look[1], 1),
+            round(_orb_pulse(frame) * 8),
+            frame.connection,
+            frame.pressed,
+            frame.hovered,
+            frame.catching,
+            frame.feature_scale,
+            frame.aim,
+        )
 
     def draw(self, painter: QPainter, size: float, frame: Frame) -> None:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -122,6 +176,23 @@ class PainterRenderer:
         painter.scale(1.0 / squash if squash else 1.0, squash)
         painter.translate(-BASE_SIZE / 2, -_ROBE_BOTTOM)
 
+        figure = self._figure(painter, size, frame)
+        if figure is not None:
+            # The whole standing character, face and light included, drawn
+            # once per look; the breathing is just where it is blitted.
+            painter.drawPixmap(
+                QRectF(0.0, 0.0, float(BASE_SIZE), float(BASE_SIZE)),
+                figure,
+                QRectF(0.0, 0.0, float(figure.width()), float(figure.height())),
+            )
+        else:
+            self._paint_figure(painter, size, frame)
+
+        painter.restore()
+        painter.restore()
+
+    def _paint_figure(self, painter: QPainter, size: float, frame: Frame) -> None:
+        """Everything above the shadow, in design units, at the origin."""
         glow, halo = _accent_colours(frame)
 
         body = self._body(painter, size, frame, glow, halo)
@@ -138,8 +209,39 @@ class PainterRenderer:
         _draw_orb(painter, frame, _staff_pose(frame)[0], glow, halo)
         _draw_props(painter, frame, glow, halo)
 
-        painter.restore()
-        painter.restore()
+    def _figure(self, painter: QPainter, size: float, frame: Frame) -> QPixmap | None:
+        """The complete character for this look, cached; None if it moves too much.
+
+        The cached body alone left the eyes, mouth and light to be redrawn on
+        every frame, which was still most of the idle cost. Between blinks and
+        light pulses nothing about the figure changes except where it sits, so
+        the figure is keyed on what it looks like (`visual_key`, minus the bob)
+        and only the position is applied per frame.
+        """
+        key = self.visual_key(frame, size)
+        if key is None:
+            return None
+        ratio = getattr(painter.device(), "devicePixelRatioF", lambda: 1.0)() or 1.0
+        pixels = max(1, int(round(size * ratio)))
+        # Drop the bob and squash: those are applied when blitting.
+        figure_key = (key[0], *key[3:], pixels)
+        cached = self._figures.get(figure_key)
+        if cached is not None:
+            return cached
+
+        pixmap = QPixmap(pixels, pixels)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        into = QPainter(pixmap)
+        into.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        into.scale(pixels / BASE_SIZE, pixels / BASE_SIZE)
+        self._paint_figure(into, size, frame)
+        into.end()
+
+        if len(self._figures) >= _FIGURE_CACHE_LIMIT:
+            # Oldest first: dicts keep insertion order.
+            self._figures.pop(next(iter(self._figures)))
+        self._figures[figure_key] = pixmap
+        return pixmap
 
     # -- the cached body --------------------------------------------------
 

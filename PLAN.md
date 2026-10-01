@@ -3,6 +3,16 @@
 Document de travail. Prose en français, identifiants et code en anglais, comme
 partout ailleurs dans le projet.
 
+## État d'avancement
+
+| Phase | État |
+|---|---|
+| 0 Renommage · 1 Personnage · 2 Claude au lancement · 3 UI/UX · 4 Guidage | ✅ faites |
+| 5 Voix | ⏸️ en pause — la dictée winrt est la reconnaissance **en ligne** de Windows (vérifié : `0x80045509`), contraire à « traitement local ». Choix du moteur local à faire (Vosk recommandé) |
+| 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
+| 7 Historique des discussions | ✅ faite |
+| 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
+
 ## Contexte
 
 L'app s'appelle aujourd'hui **Lutin** : un compagnon de bureau Windows en PySide6

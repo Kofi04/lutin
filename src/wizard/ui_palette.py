@@ -93,6 +93,9 @@ class CommandPalette(QDialog):
         self.resize(QSize(640, 440))
 
         self._sources: list[Source] = []
+        #: Providers that read what is typed: "rappelle-moi dans 20 min…"
+        #: is a command only once it has been written.
+        self._dynamic: list[Callable[[str], list[Command]]] = []
         self._results: list[Command] = []
 
         self._search = QLineEdit(self)
@@ -127,6 +130,10 @@ class CommandPalette(QDialog):
         layout.addWidget(hint)
 
     # -- sources ----------------------------------------------------------
+
+    def add_dynamic(self, provide: Callable[[str], list[Command]]) -> None:
+        """Commands built from the query itself, shown above the matches."""
+        self._dynamic.append(provide)
 
     def add_source(self, name: str, provide: Callable[[], list[Command]]) -> None:
         """Register a group of commands, rebuilt on every open."""
@@ -164,7 +171,13 @@ class CommandPalette(QDialog):
     # -- filtering --------------------------------------------------------
 
     def _refilter(self, text: str) -> None:
-        self._results = rank(
+        built: list[Command] = []
+        for provide in self._dynamic:
+            try:
+                built.extend(provide(text))
+            except Exception as exc:
+                self.source_failed.emit("saisie", str(exc)[:200])
+        self._results = built + rank(
             text, self._all, key=lambda command: command.haystack(), limit=_MAX_RESULTS
         )
         self._list.clear()
