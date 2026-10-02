@@ -1,0 +1,43 @@
+{
+  "about": "Read by tests/test_protocol.py and ui/src/protocol.test.ts: both decoders must agree on every case.",
+  "valid": [
+    { "from": "ui", "text": "{\"type\":\"hello\",\"id\":\"1\",\"payload\":{\"token\":\"t\",\"protocol\":1,\"role\":\"avatar\",\"pid\":42}}" },
+    { "from": "ui", "text": "{\"type\":\"hello\",\"payload\":{\"token\":\"t\",\"protocol\":1,\"role\":\"dev\"}}" },
+    { "from": "ui", "text": "{\"type\":\"ping\",\"id\":\"p1\"}" },
+    { "from": "ui", "text": "{\"type\":\"ask\",\"payload\":{\"text\":\"Qu'est-ce que c'est ?\"}}" },
+    { "from": "ui", "text": "{\"type\":\"ask\",\"payload\":{\"text\":\"Et là ?\",\"capture_id\":\"k3\"}}" },
+    { "from": "ui", "text": "{\"type\":\"ask\",\"payload\":{\"text\":\"null optional\",\"capture_id\":null}}" },
+    { "from": "ui", "text": "{\"type\":\"approval.answer\",\"payload\":{\"request_id\":\"r1\",\"decision\":\"deny\"}}" },
+    { "from": "ui", "text": "{\"type\":\"capture.region\",\"payload\":{\"mode\":\"ask\",\"screen_id\":\"\\\\\\\\.\\\\DISPLAY1\",\"x\":10,\"y\":20.5,\"width\":300,\"height\":200}}" },
+    { "from": "ui", "text": "{\"type\":\"agent.stop\",\"payload\":{\"agent_id\":2}}" },
+    { "from": "ui", "text": "{\"type\":\"guide.active\",\"payload\":{\"active\":true}}" },
+    { "from": "ui", "text": "{\"type\":\"cloak.ack\",\"payload\":{\"cloak_id\":\"c1\"}}" },
+    { "from": "ui", "text": "{\"type\":\"action\",\"payload\":{\"name\":\"capture.screen\"}}" },
+    { "from": "core", "text": "{\"type\":\"mood\",\"payload\":{\"mood\":\"waiting\"}}" },
+    { "from": "core", "text": "{\"type\":\"system\",\"payload\":{\"cpu\":12.5,\"memory\":40,\"battery\":80,\"charging\":true}}" },
+    { "from": "core", "text": "{\"type\":\"approval.request\",\"payload\":{\"request_id\":\"r1\",\"tool\":\"Bash\",\"detail\":\"ls\",\"project\":\"\",\"timeout_seconds\":110}}" },
+    { "from": "core", "text": "{\"type\":\"guide.point\",\"payload\":{\"screen_id\":\"\\\\\\\\.\\\\DISPLAY2\",\"x\":-0.5,\"y\":3,\"label\":\"ici\"}}" },
+    { "from": "core", "text": "{\"type\":\"sessions.update\",\"payload\":{\"sessions\":[]}}" },
+    { "from": "core", "text": "{\"type\":\"reply\",\"id\":\"p1\",\"payload\":{\"ok\":true}}" }
+  ],
+  "invalid": [
+    { "from": "ui", "error": "bad_json", "text": "{not json" },
+    { "from": "ui", "error": "bad_envelope", "text": "[1,2]" },
+    { "from": "ui", "error": "bad_envelope", "text": "{\"payload\":{}}" },
+    { "from": "ui", "error": "bad_envelope", "text": "{\"type\":\"ping\",\"id\":7}" },
+    { "from": "ui", "error": "bad_envelope", "text": "{\"type\":\"ping\",\"extra\":1}" },
+    { "from": "ui", "error": "unknown_type", "text": "{\"type\":\"format.disk\",\"payload\":{}}" },
+    { "from": "ui", "error": "wrong_direction", "text": "{\"type\":\"mood\",\"payload\":{\"mood\":\"calm\"}}" },
+    { "from": "core", "error": "wrong_direction", "text": "{\"type\":\"ask\",\"payload\":{\"text\":\"x\"}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"ask\",\"payload\":[]}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"ask\",\"payload\":{}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"ask\",\"payload\":{\"text\":3}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"ask\",\"payload\":{\"text\":\"x\",\"sudo\":true}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"approval.answer\",\"payload\":{\"request_id\":\"r1\",\"decision\":\"yes\"}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"agent.stop\",\"payload\":{\"agent_id\":1.5}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"agent.stop\",\"payload\":{\"agent_id\":true}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"guide.active\",\"payload\":{\"active\":1}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"capture.region\",\"payload\":{\"mode\":\"ask\",\"screen_id\":\"s\",\"x\":\"10\",\"y\":0,\"width\":1,\"height\":1}}" },
+    { "from": "ui", "error": "bad_payload", "text": "{\"type\":\"hello\",\"payload\":{\"token\":\"t\",\"protocol\":1,\"role\":\"root\"}}" }
+  ]
+}

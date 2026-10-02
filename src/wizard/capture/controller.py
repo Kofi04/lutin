@@ -37,18 +37,33 @@ class CaptureController(QObject):
     #: A region grabbed for reading its text: full resolution, never sent.
     text_region = Signal(object)  # QImage
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(self, parent: QObject | None = None, cloak=None) -> None:
         super().__init__(parent)
 
-        self._selector = RegionSelector(self)
-        self._selector.selected.connect(self._on_region_selected)
         # Every grab goes through this: our windows out of the way, a moment
-        # for the screen to repaint, then the grab.
-        self._cloak = Cloak()
-
-        self._halo = WindowHighlight()
+        # for the screen to repaint, then the grab. A RemoteCloak when the
+        # windows belong to the Tauri UI.
+        self._cloak = cloak if cloak is not None else Cloak()
+        # The selector's veils and the halo are windows: created on first
+        # use, so a core whose UI draws them itself never makes any.
+        self._selector_widget: RegionSelector | None = None
+        self._halo_widget: WindowHighlight | None = None
         self._ignored_hwnds: set[int] = set()
         self._target = None
+        self._for_text = False
+
+    @property
+    def _selector(self) -> RegionSelector:
+        if self._selector_widget is None:
+            self._selector_widget = RegionSelector(self)
+            self._selector_widget.selected.connect(self._on_region_selected)
+        return self._selector_widget
+
+    @property
+    def _halo(self) -> WindowHighlight:
+        if self._halo_widget is None:
+            self._halo_widget = WindowHighlight()
+        return self._halo_widget
 
     # -- registration -----------------------------------------------------
 
@@ -76,11 +91,26 @@ class CaptureController(QObject):
             self._selector.start()
 
     def _on_region_selected(self, rect: QRect) -> None:
-        if getattr(self, "_for_text", False):
-            self._for_text = False
-            self._cloak.around(lambda: self._grab_text(rect))
+        for_text, self._for_text = self._for_text, False
+        self.grab_region(rect, for_text)
+
+    def grab_region(self, rect: QRect, for_text: bool = False) -> None:
+        """Grab a rectangle (logical desktop coordinates) chosen elsewhere."""
+        if rect.width() <= 0 or rect.height() <= 0:
+            self.failed.emit("Zone vide : rien à capturer.")
             return
-        self._cloak.around(lambda: self._grab_region(rect))
+        grab = self._grab_text if for_text else self._grab_region
+        self._around(lambda: grab(rect))
+
+    def _around(self, action) -> None:
+        started = self._cloak.around(
+            action,
+            on_abort=lambda: self.failed.emit(
+                "Capture annulée : l'interface n'a pas pu se cacher à temps."
+            ),
+        )
+        if not started:
+            self.failed.emit("Une capture est déjà en cours.")
 
     def _grab_text(self, rect: QRect) -> None:
         # Full resolution on purpose: the 1568 px downscale that suits
@@ -116,7 +146,7 @@ class CaptureController(QObject):
             self.failed.emit("Aucun écran disponible.")
             return
         rect = screen.geometry()
-        self._cloak.around(lambda: self._grab_screen(rect))
+        self._around(lambda: self._grab_screen(rect))
 
     def _grab_screen(self, rect: QRect) -> None:
         image = grab_rect(rect)
@@ -148,7 +178,8 @@ class CaptureController(QObject):
         )
 
     def cancel_targeting(self) -> None:
-        self._halo.hide_halo()
+        if self._halo_widget is not None:
+            self._halo_widget.hide_halo()
         self._target = None
 
     def finish_targeting(self) -> None:
@@ -160,7 +191,7 @@ class CaptureController(QObject):
             return
 
         rect = physical_to_logical(info.left, info.top, info.right, info.bottom)
-        self._cloak.around(lambda: self._grab_window(info, rect))
+        self._around(lambda: self._grab_window(info, rect))
 
     def _grab_window(self, info, rect: QRect) -> None:
         image = capture_window(info)

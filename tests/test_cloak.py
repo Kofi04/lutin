@@ -126,3 +126,118 @@ def test_a_second_grab_during_the_first_is_refused(widgets):
     # Hiding again mid-grab would record the hidden state as "visible" and
     # never restore the window.
     assert cloak.around(lambda: None) is False
+
+
+# -- RemoteCloak: the windows belong to the Tauri UI -------------------------
+
+
+def _spin(ms: int) -> None:
+    """Run the Qt event loop for a while, so timers can fire."""
+    import time
+
+    from PySide6.QtCore import QCoreApplication
+
+    end = time.monotonic() + ms / 1000
+    while time.monotonic() < end:
+        QCoreApplication.processEvents()
+        time.sleep(0.005)
+
+
+class _Wire:
+    """Stands in for the WebSocket: records what the cloak broadcasts."""
+
+    def __init__(self, clients):
+        self.clients = list(clients)
+        self.sent = []
+
+    def broadcast(self, type_, payload):
+        self.sent.append((type_, payload["cloak_id"]))
+
+
+def test_remote_grab_waits_for_every_window_to_ack():
+    from wizard.capture.cloak import RemoteCloak
+
+    wire = _Wire(["avatar", "panel"])
+    cloak = RemoteCloak(wire.broadcast, lambda: wire.clients, delay_ms=0)
+    grabbed = []
+
+    assert cloak.around(lambda: grabbed.append(True))
+    assert wire.sent == [("cloak.hide", "c1")]
+
+    cloak.ack("avatar", "c1")
+    assert grabbed == []  # the panel is still on screen
+    cloak.ack("panel", "c1")
+
+    assert grabbed == [True]
+    assert wire.sent[-1] == ("cloak.show", "c1")
+    assert not cloak.busy
+
+
+def test_remote_grab_is_abandoned_without_an_ack():
+    """A capture with our own windows in it is worse than no capture."""
+    from wizard.capture.cloak import RemoteCloak
+
+    wire = _Wire(["avatar"])
+    cloak = RemoteCloak(wire.broadcast, lambda: wire.clients, ack_timeout_ms=30)
+    grabbed, aborted = [], []
+
+    cloak.around(lambda: grabbed.append(True), on_abort=lambda: aborted.append(True))
+    _spin(120)
+
+    assert grabbed == []
+    assert aborted == [True]
+    assert wire.sent == [("cloak.hide", "c1"), ("cloak.show", "c1")]
+    # And a late ack for the abandoned grab changes nothing.
+    cloak.ack("avatar", "c1")
+    assert grabbed == []
+
+
+def test_remote_grab_with_no_window_connected_grabs_at_once():
+    from wizard.capture.cloak import RemoteCloak
+
+    wire = _Wire([])
+    cloak = RemoteCloak(wire.broadcast, lambda: wire.clients)
+    grabbed = []
+
+    cloak.around(lambda: grabbed.append(True))
+
+    assert grabbed == [True]
+    assert wire.sent == []
+
+
+def test_a_window_that_disconnects_no_longer_holds_the_grab():
+    from wizard.capture.cloak import RemoteCloak
+
+    wire = _Wire(["avatar", "panel"])
+    cloak = RemoteCloak(wire.broadcast, lambda: wire.clients, delay_ms=0)
+    grabbed = []
+
+    cloak.around(lambda: grabbed.append(True))
+    cloak.ack("avatar", "c1")
+    cloak.forget("panel")
+
+    assert grabbed == [True]
+
+
+def test_remote_grab_waits_for_the_repaint_after_the_acks():
+    from wizard.capture.cloak import RemoteCloak
+
+    wire = _Wire(["avatar"])
+    cloak = RemoteCloak(wire.broadcast, lambda: wire.clients, delay_ms=40)
+    grabbed = []
+
+    cloak.around(lambda: grabbed.append(True))
+    cloak.ack("avatar", "c1")
+    assert grabbed == []
+    _spin(150)
+    assert grabbed == [True]
+
+
+def test_one_remote_grab_at_a_time():
+    from wizard.capture.cloak import RemoteCloak
+
+    wire = _Wire(["avatar"])
+    cloak = RemoteCloak(wire.broadcast, lambda: wire.clients)
+
+    assert cloak.around(lambda: None)
+    assert not cloak.around(lambda: None)

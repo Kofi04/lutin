@@ -239,6 +239,15 @@ The History window's *Mes sessions Claude Code* view **reads** the transcripts
 in `~/.claude/projects` when you open it, and never writes to them. Nothing
 from them is copied into `wizard.db`.
 
+**Headless mode listens locally.** `--headless` (the core for the Tauri UI
+being built, see below) opens a WebSocket on `127.0.0.1` only, on a random port.
+It is not reachable from the network, and since any web page open in a browser
+on this machine *could* reach it, every connection must present a secret token
+within two seconds, and connections from a web origin other than our own UI's
+are refused. The token is handed over by the process that launched the core and
+removed from its environment at once, so Claude Code, agents and launched apps
+never inherit it. It is never logged. The default (Qt) mode opens no socket.
+
 *Lancer au démarrage de Windows* writes one `HKCU\...\CurrentVersion\Run` value
 and removes it when you untick it. The first start after the rename also removes
 the old `Lutin` value and writes the new one in its place, so autostart keeps
@@ -254,6 +263,15 @@ The suite covers the logic that is worth protecting and does not need a
 display: config parsing and clamping, SQLite behaviour (dedup, pruning, LIKE
 escaping), the mood thresholds, the hotkey/duration parsers, image sizing,
 the hook framing and settings.json surgery, and the rename migration.
+
+The protocol shared with the Tauri UI is tested from both sides, against the
+same fixtures (`tests/protocol_fixtures.json`):
+
+```powershell
+cd ui
+npm install
+npm run check      # tsc --noEmit, then Vitest
+```
 
 ## Assistant features
 
@@ -570,16 +588,25 @@ src/wizard/
   tray.py           tray icon and menu
   ui.py             quick note, history panel, reminder dialog
   app.py            wiring only: who talks to whom
+  presenter.py      what the app shows, as one interface
+  presenter_qt.py   ...as Qt widgets (the default)
+  presenter_remote.py  ...as events to the Tauri UI (--headless)
+  protocol.py       the UI protocol, checked both ways
+  protocol_messages.json  every message, read by Python and TypeScript
+  ws_server.py      the local WebSocket: token, origin, size cap
+  screens.py        desktop coordinates <-> (screen id, position)
   features/         launcher, clipboard watcher, monitor, timers
 hooks/
   wizard_hook.py    the hook handler Claude Code spawns (stdlib only)
 scripts/
   shortcut.ps1      creates/removes the Desktop and Start Menu shortcuts
+ui/                 the Tauri UI (phase M1: the typed protocol only)
 tools/
   make_icon.py      renders the character into a multi-resolution app.ico
   contact_sheet.py  renders every pose to docs/poses.png, to look at them
 assets/character/   hand-drawn frames, if you have any (see docs/ASSETS_BRIEF.md)
 PLAN.md             the plan this app is being built out against
+DESIGN.md           the design of the Tauri UI
 ```
 
 Decisions worth knowing about:
@@ -600,6 +627,48 @@ Decisions worth knowing about:
 - **The bridge is a named pipe.** `QLocalServer` is one on Windows, which is
   the exact equivalent of the Unix socket coucou uses, and it already lives in
   the Qt event loop.
+
+## Headless core (Tauri UI, in progress)
+
+The Qt windows are being replaced by a Tauri 2 UI (PLAN.md, *Migration UI*).
+The Python code stays, as a core with no window, and talks to the UI over a
+local WebSocket. Phase M1 is the core side:
+
+```powershell
+$env:WIZARD_UI_TOKEN = "<a long random secret>"
+.venv\Scripts\python.exe -m wizard --headless
+# WIZARD_READY {"port": 51234, "pid": 9796}
+```
+
+It creates no visible window: hotkeys, captures, Claude, the hook bridge and
+the database all run as before, and everything they would have shown becomes
+an event on the socket. Without `WIZARD_UI_TOKEN`, a token is generated and
+printed on that ready line, for a manual run. Exit codes: 3 if the app is
+already running, 4 if the socket cannot listen.
+
+- **One protocol, one file.** `src/wizard/protocol_messages.json` lists every
+  message; `protocol.py` and `ui/src/protocol.ts` both read it, and the
+  TypeScript types do not compile if they drift from it.
+- **One seam.** `app.py` never touches a widget: it talks to a *presenter*,
+  either `QtPresenter` (today's windows, still the default) or
+  `ProtocolPresenter` (the socket).
+- **The promises hold without the UI.** An approval nobody answers is denied
+  at its timeout by the core itself. A capture reaches Claude only after a
+  `capture.confirm` naming the exact capture the UI was shown. Before a grab,
+  every UI window must confirm it is hidden (`cloak.hide` → `cloak.ack`); one
+  that does not answer within 600 ms cancels the capture rather than let our
+  own windows into it.
+- **Coordinates** go out as a screen id (`\\.\DISPLAY1`, the name Qt and Tauri
+  both use) plus logical pixels from that screen's corner (`screens.py`).
+
+Measured on the real Windows platform: no visible window, a screen capture
+through the cloak handshake in 0.35 s, 0.08 % of one core idle with a UI
+connected (60 s), and a clean exit in 0.3 s on the `quit` action.
+
+Not in headless mode yet: the settings, history, quick note, palette,
+onboarding and hook-diff windows. Asked for, they become a `window.open` event,
+and nothing is written meanwhile (installing the hooks needs the diff shown
+first). They come back in phase M6 bis.
 
 ## Known limits
 

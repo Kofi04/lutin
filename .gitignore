@@ -11,3 +11,4 @@ dist/
 state.ini
 .ruff_cache/
 .gstack/
+node_modules/

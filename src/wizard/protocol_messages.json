@@ -1,0 +1,240 @@
+{
+  "version": 1,
+  "about": "Every message between the Python core and the Tauri UI. Read by protocol.py and ui/src/protocol.ts; nothing else defines a message. Field types: string, integer, number, boolean, object, array, or a list of allowed strings. A trailing ? marks an optional field. Unknown fields are rejected.",
+  "messages": {
+    "hello": {
+      "from": "ui",
+      "doc": "First message of every connection, within 2 s, or the core closes it.",
+      "payload": {
+        "token": "string",
+        "protocol": "integer",
+        "role": ["avatar", "panel", "overlay", "settings", "history", "dev"],
+        "pid": "integer?"
+      }
+    },
+    "ping": {
+      "from": "ui",
+      "doc": "A request: the core answers with reply, carrying the same id.",
+      "payload": {}
+    },
+    "ask": {
+      "from": "ui",
+      "doc": "A question typed in the panel, with the capture confirmed for it, if any.",
+      "payload": { "text": "string", "capture_id": "string?" }
+    },
+    "ask.cancel": { "from": "ui", "doc": "Stop the answer being written.", "payload": {} },
+    "approval.answer": {
+      "from": "ui",
+      "payload": { "request_id": "string", "decision": ["allow", "always", "deny"] }
+    },
+    "capture.start": {
+      "from": "ui",
+      "doc": "A capture gesture chosen in the UI (a chip, a menu entry).",
+      "payload": { "mode": ["region", "screen", "text"] }
+    },
+    "capture.region": {
+      "from": "ui",
+      "doc": "The rectangle the user selected after capture.select, in logical pixels of that screen.",
+      "payload": {
+        "mode": ["ask", "text"],
+        "screen_id": "string",
+        "x": "number",
+        "y": "number",
+        "width": "number",
+        "height": "number"
+      }
+    },
+    "capture.file": { "from": "ui", "doc": "A file dropped on the avatar.", "payload": { "path": "string" } },
+    "capture.confirm": { "from": "ui", "payload": { "capture_id": "string" } },
+    "capture.cancel": { "from": "ui", "payload": { "capture_id": "string?" } },
+    "selection.pick": {
+      "from": "ui",
+      "doc": "The action chosen from selection.menu.",
+      "payload": { "selection_id": "string", "action": "string" }
+    },
+    "selection.replace": { "from": "ui", "payload": { "selection_id": "string", "text": "string" } },
+    "selection.copy": { "from": "ui", "payload": { "text": "string" } },
+    "agent.start": { "from": "ui", "payload": { "task": "string", "folder": "string" } },
+    "agent.stop": { "from": "ui", "payload": { "agent_id": "integer" } },
+    "session.dismiss": { "from": "ui", "payload": { "session_id": "string" } },
+    "guide.active": {
+      "from": "ui",
+      "doc": "The guide cursor is shown (true) or gone (false): the core holds Escape only in between.",
+      "payload": { "active": "boolean" }
+    },
+    "guide.done": { "from": "ui", "doc": "The user dismissed the guide.", "payload": {} },
+    "cloak.ack": { "from": "ui", "doc": "This window is hidden; the core may grab the screen.", "payload": { "cloak_id": "string" } },
+    "action": {
+      "from": "ui",
+      "doc": "A menu or tray entry with no payload of its own.",
+      "payload": {
+        "name": [
+          "ask",
+          "capture.region",
+          "capture.screen",
+          "capture.text",
+          "selection",
+          "conversation.reset",
+          "config.reload",
+          "config.open_folder",
+          "quit"
+        ]
+      }
+    },
+
+    "hello.ok": {
+      "from": "core",
+      "payload": { "protocol": "integer", "version": "string", "pid": "integer" }
+    },
+    "reply": {
+      "from": "core",
+      "doc": "The answer to a request, with the request's id.",
+      "payload": { "ok": "boolean", "data": "object?" }
+    },
+    "error": {
+      "from": "core",
+      "doc": "A message the core refused, with the offending message's id when it had one.",
+      "payload": { "error": "string", "message": "string" }
+    },
+    "mood": {
+      "from": "core",
+      "payload": {
+        "mood": ["calm", "busy", "stressed", "tired", "working", "waiting", "done", "error"]
+      }
+    },
+    "connection": {
+      "from": "core",
+      "doc": "The link to Claude Code: connecting, online, offline...",
+      "payload": { "state": "string", "detail": "string" }
+    },
+    "system": {
+      "from": "core",
+      "doc": "Machine load, for the tray tooltip.",
+      "payload": { "cpu": "number", "memory": "number", "battery": "integer?", "charging": "boolean?" }
+    },
+    "quiet": {
+      "from": "core",
+      "doc": "A fullscreen game, video or presentation: hide everything until off.",
+      "payload": { "on": "boolean" }
+    },
+    "avatar.toggle": { "from": "core", "doc": "The show/hide hotkey was pressed.", "payload": {} },
+    "panel.open": {
+      "from": "core",
+      "doc": "Open the panel, from a hotkey or after a capture was confirmed.",
+      "payload": {
+        "state": ["bar", "answer"],
+        "capture": "object?",
+        "context": "string?",
+        "status": "string?"
+      }
+    },
+    "stream.start": { "from": "core", "doc": "A question was sent; an answer is coming.", "payload": {} },
+    "stream.chunk": { "from": "core", "payload": { "text": "string" } },
+    "stream.status": { "from": "core", "doc": "What Claude is doing right now (a tool, a search).", "payload": { "text": "string" } },
+    "stream.reset": { "from": "core", "doc": "Throw away the answer so far; it restarts.", "payload": {} },
+    "stream.end": { "from": "core", "payload": { "status": "string" } },
+    "stream.error": { "from": "core", "payload": { "message": "string" } },
+    "approval.request": {
+      "from": "core",
+      "doc": "Silence is refusal: past timeout_seconds the core denies on its own and sends approval.cancel.",
+      "payload": {
+        "request_id": "string",
+        "tool": "string",
+        "detail": "string",
+        "project": "string",
+        "timeout_seconds": "integer"
+      }
+    },
+    "approval.cancel": { "from": "core", "payload": { "request_id": "string" } },
+    "capture.select": {
+      "from": "core",
+      "doc": "Let the user draw a rectangle on screen, then answer with capture.region or capture.cancel.",
+      "payload": { "mode": ["ask", "text"] }
+    },
+    "capture.preview": {
+      "from": "core",
+      "doc": "Exactly what would be sent. Nothing leaves without capture.confirm.",
+      "payload": {
+        "capture_id": "string",
+        "kind": ["region", "window", "file", "screen"],
+        "label": "string",
+        "width": "integer",
+        "height": "integer",
+        "tokens": "integer",
+        "png_base64": "string"
+      }
+    },
+    "selection.menu": {
+      "from": "core",
+      "doc": "Text was selected: offer the actions, answer with selection.pick.",
+      "payload": { "selection_id": "string", "preview": "string", "actions": "array" }
+    },
+    "selection.result": {
+      "from": "core",
+      "payload": {
+        "selection_id": "string",
+        "action": "string",
+        "status": ["working", "done", "error"],
+        "text": "string",
+        "replaces": "boolean"
+      }
+    },
+    "sessions.update": { "from": "core", "payload": { "sessions": "array" } },
+    "toast": {
+      "from": "core",
+      "payload": {
+        "title": "string",
+        "body": "string",
+        "kind": ["info", "success", "warning", "error"]
+      }
+    },
+    "guide.point": {
+      "from": "core",
+      "doc": "Logical pixels relative to the top-left corner of screen_id.",
+      "payload": { "screen_id": "string", "x": "number", "y": "number", "label": "string" }
+    },
+    "guide.highlight": {
+      "from": "core",
+      "payload": {
+        "screen_id": "string",
+        "x": "number",
+        "y": "number",
+        "width": "number",
+        "height": "number",
+        "label": "string",
+        "shape": ["rect", "ellipse"]
+      }
+    },
+    "guide.steps": {
+      "from": "core",
+      "doc": "A tutorial; each step is {text, target} where target is null or shaped like guide.point / guide.highlight with a kind field.",
+      "payload": { "steps": "array" }
+    },
+    "guide.clear": { "from": "core", "payload": {} },
+    "cloak.hide": {
+      "from": "core",
+      "doc": "Hide every window, then answer cloak.ack. Without an ack in time, the capture is abandoned.",
+      "payload": { "cloak_id": "string" }
+    },
+    "cloak.show": { "from": "core", "payload": { "cloak_id": "string" } },
+    "window.open": {
+      "from": "core",
+      "doc": "A window the Tauri UI does not have yet (phase M6 bis) was asked for.",
+      "payload": {
+        "name": [
+          "quick_note",
+          "clipboard",
+          "notes",
+          "reminder",
+          "palette",
+          "settings",
+          "history",
+          "agent",
+          "hooks.install",
+          "hooks.uninstall",
+          "onboarding"
+        ]
+      }
+    }
+  }
+}
