@@ -20,9 +20,10 @@ import logging
 import os
 import secrets
 import sys
+import threading
 from collections import OrderedDict
 
-from PySide6.QtCore import QRect, QTimer
+from PySide6.QtCore import QObject, QRect, QTimer, Signal
 
 from . import __version__, screens
 from .assistant import selection as selection_actions
@@ -47,6 +48,40 @@ EXIT_SERVER_FAILED = 4
 
 #: Captures shown but not yet confirmed, or confirmed but not yet asked about.
 _KEPT_CAPTURES = 5
+
+
+class ParentWatch(QObject):
+    """Quit when the launcher goes away.
+
+    The launcher keeps our stdin open and never writes to it. When it exits,
+    normally or by crashing, Windows closes the pipe and the read below ends:
+    the core then shuts down cleanly instead of living on as an orphan that
+    still holds the hotkeys and the single-instance lock.
+    """
+
+    gone = Signal()
+
+    def __init__(self, stream=None) -> None:
+        super().__init__()
+        self._stream = stream if stream is not None else sys.stdin
+
+    def start(self) -> bool:
+        if self._stream is None:
+            return False
+        threading.Thread(
+            target=self._wait, name="wizard-parent-watch", daemon=True
+        ).start()
+        return True
+
+    def _wait(self) -> None:
+        source = getattr(self._stream, "buffer", self._stream)
+        try:
+            while source.read(4096):
+                pass  # nothing is ever sent; drain anything that is
+        except (OSError, ValueError):
+            pass
+        # Emitted from this thread, delivered on the GUI thread (queued).
+        self.gone.emit()
 
 
 def take_token() -> tuple[str, bool]:

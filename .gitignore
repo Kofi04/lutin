@@ -12,3 +12,6 @@ state.ini
 .ruff_cache/
 .gstack/
 node_modules/
+ui/dist/
+ui/src-tauri/target/
+ui/src-tauri/gen/schemas/

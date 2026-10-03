@@ -10,10 +10,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "jsx": "react-jsx"
   },
   "include": [
     "src",
+    "vite.config.ts",
     "../src/wizard/protocol_messages.json",
     "../tests/protocol_fixtures.json"
   ]

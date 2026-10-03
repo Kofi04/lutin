@@ -951,13 +951,19 @@ def main(argv: list[str] | None = None) -> int:
     """Start the app: with Qt windows, or with --headless for the Tauri UI."""
     args = list(argv if argv is not None else sys.argv)
     presenter = None
+    watch = None
     if "--headless" in args[1:]:
-        args = [a for a in args if a != "--headless"]
-        from .presenter_remote import ProtocolPresenter, take_token
+        from .presenter_remote import ParentWatch, ProtocolPresenter, take_token
 
         token, generated = take_token()
         presenter = ProtocolPresenter(token, announce_token=generated)
+        if "--exit-on-stdin-close" in args[1:]:
+            watch = ParentWatch()
+        args = [a for a in args if a not in ("--headless", "--exit-on-stdin-close")]
     app = AvatarApp(args, presenter)
+    if watch is not None:
+        watch.gone.connect(app.shutdown)
+        watch.start()
     return app.run()
 
 

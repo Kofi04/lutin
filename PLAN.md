@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ faite (protocole, serveur WebSocket, `--headless`) · M2–M7 à faire — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3–M7 à faire — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -624,6 +624,41 @@ débranche ses gestionnaires avant de fermer).
 - Fenêtre overlay traversée par les clics et toujours au premier plan sur Windows 10.
 - Mémoire : chaque fenêtre WebView2 a son processus de rendu ; il faut mesurer le total (aujourd'hui 67 Mo).
 
+**Fait (M2)** — Rust 1.99 installé par `rustup` (installeur officiel non signé Authenticode,
+empreinte SHA-256 vérifiée contre celle publiée). Tests : 747 Python, 53 Vitest, 2 Rust.
+
+Mesuré sur la vraie plateforme, par un script qui ne touche ni au clavier ni à la souris :
+
+| Point | Résultat |
+|---|---|
+| Avatar | 72×72, dans la zone de travail, 12 px des bords, `noactivate` |
+| Panneau | caché au démarrage, s'ouvre au-dessus de l'avatar |
+| Overlay | une par écran, clic traversant (`WindowFromPoint` trouve la fenêtre dessous), reste au premier plan |
+| Connexions | avatar + panneau + overlay connectés ; après un crash simulé du core, relancé et reconnectés au nouveau port |
+| Crash de Tauri | le core part seul en 6–7 s (stdin fermé) |
+| **WDA** | **accepté sur les trois fenêtres**, overlay comprise — à condition de l'appliquer avant le clic traversant |
+| Mémoire | ~550 Mo au total : WebView2 ~240 Mo (9 processus), Python ~145 Mo, Claude Code ~135 Mo |
+| CPU au repos | 4,2–4,4 % au total : core 0,08 %, shell 0,03 %, WebView2 1,8 %, **Claude Code 2,2–2,5 %** |
+
+Écarts et découvertes :
+- `core.rs` s'appelle `supervisor.rs` (`core` est le nom d'une crate de Rust) ; `protect.rs`
+  porte l'essai WDA.
+- **Pas de job object** « kill on close » : il tuerait aussi les applis lancées depuis le
+  lanceur quand on quitte le sorcier. Arrêt par fermeture du stdin du core
+  (`--exit-on-stdin-close`, ajouté au core), mise à mort après 10 s du seul interpréteur.
+  5 s ne suffisaient pas : fermer la connexion Claude en prend environ 5 (déjà connu).
+- Windows dimensionne une fenêtre avant que tao gère ses messages : l'avatar était créé à
+  136 px (`SM_CXMINTRACK`) et débordait. Redimensionné juste après la création.
+- Le chemin du venv construit avec `..` faisait avertir Python : construit par `parent()`.
+- **Le CPU du processus Claude Code (pré-chauffage) n'avait jamais été compté** : 2,2–2,5 %,
+  aussi en mode Qt. README corrigé. Le budget de 1 % n'est donc pas tenu dès que
+  `claude.prewarm` est actif, indépendamment de la migration — à arbitrer.
+- Les mesures CPU sont bruitées quand la machine sert en même temps (0,3 % à 3,5 % pour
+  WebView2 seul selon les passages) : toujours mesurer deux fois, sur 60 s ou plus.
+- Non vérifié automatiquement : l'entrée « Quitter » du menu de l'icône (il faut cliquer),
+  et la bascule de focus du panneau (reportée en M5 avec le vrai panneau). Le réglage
+  `ui.exclude_from_capture = false` n'est pas encore lu par Tauri (M6 bis, paramètres).
+
 ### Phase M3 — Playground navigateur
 
 **Créé** : `ui/src/playground/` — `npm run dev` ouvre une page qui affiche les
@@ -711,5 +746,5 @@ signalent les exe PyInstaller non signés.
 
 ### Questions à trancher avant la phase M1
 
-Tranchées le 2026-10-02 (voir en tête de section). Reste ouvert : **qui installe Rust**
-avant la phase M2 (`rustup`, environ 1 Go avec la chaîne MSVC déjà présente).
+Tranchées le 2026-10-02 (voir en tête de section). Rust installé le 2026-10-03 pour M2.
+Python 3.13 reste à installer avant M7.

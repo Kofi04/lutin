@@ -332,3 +332,33 @@ def test_hooks_are_never_written_without_the_diff_window(core, monkeypatch):
 
     assert client.wait_for("window.open").payload == {"name": "hooks.install"}
     assert written == []
+
+
+# -- the launcher going away ---------------------------------------------------
+
+
+def test_closing_stdin_means_the_launcher_is_gone():
+    """Tauri keeps the pipe open; when it dies, Windows closes it for us."""
+    from wizard.presenter_remote import ParentWatch
+
+    read_fd, write_fd = os.pipe()
+    stream = os.fdopen(read_fd, "rb")
+    watch = ParentWatch(stream)
+    gone = []
+    watch.gone.connect(lambda: gone.append(True))
+    assert watch.start()
+
+    os.write(write_fd, b"ignored")
+    assert not spin_until(lambda: gone, timeout_ms=200)
+    os.close(write_fd)
+
+    assert spin_until(lambda: gone == [True])
+    stream.close()
+
+
+def test_no_stdin_no_watch():
+    from wizard.presenter_remote import ParentWatch
+
+    watch = ParentWatch()
+    watch._stream = None  # pythonw.exe: sys.stdin is None
+    assert not watch.start()

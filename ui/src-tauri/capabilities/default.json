@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What our own windows may ask of Tauri: events, and showing, hiding or dragging themselves.",
+  "windows": ["avatar", "panel", "overlay-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-start-dragging"
+  ]
+}
