@@ -309,6 +309,28 @@ def test_guide_point_is_sent_relative_to_its_screen(core):
     assert point.payload["label"] == "ici"
 
 
+def test_the_core_holds_escape_while_a_guide_is_shown(core):
+    """Not the overlays: each sees one screen, and when the guide moved from
+    one to the other their "inactive" and "active" raced each other."""
+    client = core.test_connect("overlay")
+    core.claude.overlay.point_requested.emit(40.0, 30.0, "ici")
+    core.claude.overlay.highlight_requested.emit(10.0, 10.0, 50.0, 20.0, "là", "rect")
+    assert core.test_escapes == [True, True]
+
+    core.claude.overlay.clear_requested.emit()
+    assert core.test_escapes[-1] is False
+    assert client.wait_for("guide.clear") is not None
+
+
+def test_guide_done_from_the_ui_clears_every_screen(core):
+    avatar, overlay = core.test_connect("avatar"), core.test_connect("overlay")
+    core.claude.overlay.point_requested.emit(40.0, 30.0, "ici")
+    overlay.send("guide.done")
+
+    assert avatar.wait_for("guide.clear") is not None
+    assert core.test_escapes[-1] is False
+
+
 def test_guide_activity_claims_and_releases_escape(core):
     client = core.test_connect("overlay")
     client.send("guide.active", {"active": True})

@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3–M7 à faire — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4–M7 à faire — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -670,6 +670,35 @@ WebSocket ; elle n'a aucun lien avec le core.
 **Vérification** : chaque scénario se joue sans erreur ; un test Vitest charge tous les scénarios et vérifie qu'ils respectent `protocol/messages.json`.
 
 **Risque** : faible. Le seul piège est que le faux et le vrai divergent — d'où la validation des scénarios contre le même schéma.
+
+**Fait (M3)** — `npm run playground` (et non `npm run dev`, que Tauri lance lui-même : il
+ouvrirait un navigateur à chaque `tauri dev`). Tests : 749 Python, 70 Vitest, 2 Rust.
+
+- Les trois pages sont devenues des **vues** (`AvatarView`, `PanelView`, `OverlayView`) qui
+  reçoivent leur connexion et un `WindowEnv` (afficher, cacher, glisser…) au lieu d'appeler
+  Tauri. Le terrain d'essai montre donc les vraies vues, branchées sur le **vrai** `CoreClient` ;
+  seul le socket est faux (`playground/hub.ts`), et il rejoue l'état à la connexion comme le core.
+- Cinq scénarios JSON (streaming, approbation, capture avec cloak, guide sur deux écrans,
+  plantage du core), validés contre `protocol_messages.json`, avec deux pseudo-événements
+  `@core.down` / `@core.up`. Contrôles : lecture, vitesse ×1/×2/×4, faux menu de l'icône,
+  journal des commandes envoyées.
+
+Vérifié dans un navigateur (`/browse`). Le terrain d'essai a trouvé **trois vrais bugs**,
+corrigés :
+1. **Fenêtres bloquées « hors ligne »** alors que les événements arrivaient : `useStatus` lisait
+   l'état au rendu et s'abonnait dans un effet ; un changement entre les deux était perdu.
+   Remplacé par `useSyncExternalStore`. Systématique ici, rare mais possible dans l'app.
+2. **Le panneau restait caché** sur une approbation, un aperçu de capture ou un menu de
+   sélection : l'approbation aurait expiré en silence, la capture n'aurait jamais pu être
+   confirmée. Il s'ouvre maintenant pour tout ce qui attend une réponse.
+3. **Échap pouvait être relâché avec un guide à l'écran** : chaque overlay annonçait
+   `guide.active` pour son écran, et quand le guide passait d'un écran à l'autre, « inactif »
+   et « actif » se croisaient sans ordre garanti. C'est désormais le core qui réserve Échap
+   sur `guide.point|highlight|steps` et le relâche sur `guide.clear|done` (testé). Le message
+   `guide.active` reste dans le protocole sans être envoyé par les overlays.
+
+Limite de l'outil, pas du projet : `browse` (Bun « baseline », processeur sans AVX2) plante
+par intermittence sur les commandes longues ; les commandes courtes passent.
 
 ### Phase M4 — Design tokens et avatar Canvas 2D (DESIGN §3, §4)
 

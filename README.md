@@ -715,6 +715,20 @@ the Tauri shell 0.03 %, WebView2 1.8 %, Claude Code 2.2–2.5 %. WebView2's shar
 is with placeholder pages that redraw their event log on every message; the
 budget is worked on in phase M4.
 
+### The playground (phase M3)
+
+```powershell
+cd ui
+npm run playground    # opens http://127.0.0.1:5173/playground.html
+```
+
+The real window views, fed by a fake core that replays a scenario
+(`ui/src/playground/scenarios/*.json`: a streamed answer, an approval running
+out, a capture through the cloak, the guide on two screens, a core crash). No
+Python, no Tauri: this is where the look is worked on. Only the socket is
+fake: each window keeps its real connection code, reconnection and cloak
+included, and every scenario is checked against the protocol by the tests.
+
 ## Known limits
 
 - Windows only. The modules import cleanly elsewhere (the Win32 calls degrade to

@@ -1,0 +1,69 @@
+{
+  "name": "Approbation avec compte à rebours",
+  "description": "Claude veut lancer une commande ; sans réponse, le core refuse à l'expiration.",
+  "screens": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "steps": [
+    {
+      "at": 0,
+      "type": "connection",
+      "payload": {
+        "state": "online",
+        "detail": ""
+      }
+    },
+    {
+      "at": 0,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    },
+    {
+      "at": 500,
+      "type": "mood",
+      "payload": {
+        "mood": "waiting"
+      }
+    },
+    {
+      "at": 500,
+      "type": "approval.request",
+      "payload": {
+        "request_id": "r1",
+        "tool": "Bash",
+        "detail": "pytest -q tests/test_headless.py",
+        "project": "desktop-avatar",
+        "timeout_seconds": 10
+      }
+    },
+    {
+      "at": 10500,
+      "type": "approval.cancel",
+      "payload": {
+        "request_id": "r1"
+      }
+    },
+    {
+      "at": 10500,
+      "type": "toast",
+      "payload": {
+        "title": "Refusé",
+        "body": "Pas de réponse : refus automatique.",
+        "kind": "warning"
+      }
+    },
+    {
+      "at": 10500,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    }
+  ]
+}

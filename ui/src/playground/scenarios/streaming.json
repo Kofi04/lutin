@@ -1,0 +1,145 @@
+{
+  "name": "Réponse en streaming",
+  "description": "Une question, Claude réfléchit, utilise un outil, puis répond par morceaux.",
+  "screens": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "steps": [
+    {
+      "at": 0,
+      "type": "connection",
+      "payload": {
+        "state": "online",
+        "detail": ""
+      }
+    },
+    {
+      "at": 0,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    },
+    {
+      "at": 400,
+      "type": "panel.open",
+      "payload": {
+        "state": "bar"
+      }
+    },
+    {
+      "at": 1200,
+      "type": "stream.start",
+      "payload": {}
+    },
+    {
+      "at": 1200,
+      "type": "mood",
+      "payload": {
+        "mood": "working"
+      }
+    },
+    {
+      "at": 1600,
+      "type": "stream.status",
+      "payload": {
+        "text": "Lecture de app.py"
+      }
+    },
+    {
+      "at": 2400,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "Cette erreur vient"
+      }
+    },
+    {
+      "at": 2490,
+      "type": "stream.chunk",
+      "payload": {
+        "text": " de la ligne 12 : "
+      }
+    },
+    {
+      "at": 2580,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "`items` vaut `None"
+      }
+    },
+    {
+      "at": 2670,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "` quand la liste e"
+      }
+    },
+    {
+      "at": 2760,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "st vide.\n\n```pytho"
+      }
+    },
+    {
+      "at": 2850,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "n\nitems = load() o"
+      }
+    },
+    {
+      "at": 2940,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "r []\n```\n\nAvec cet"
+      }
+    },
+    {
+      "at": 3030,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "te valeur par défa"
+      }
+    },
+    {
+      "at": 3120,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "ut, la boucle ne p"
+      }
+    },
+    {
+      "at": 3210,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "lante plus."
+      }
+    },
+    {
+      "at": 3600,
+      "type": "stream.end",
+      "payload": {
+        "status": "Terminé"
+      }
+    },
+    {
+      "at": 3600,
+      "type": "mood",
+      "payload": {
+        "mood": "done"
+      }
+    },
+    {
+      "at": 7300,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    }
+  ]
+}

@@ -144,7 +144,7 @@ class ProtocolPresenter(Presenter):
                 p["session_id"]
             ),
             "guide.active": lambda client, p: self.app._grab_escape(p["active"]),
-            "guide.done": lambda client, p: self.app._grab_escape(False),
+            "guide.done": lambda client, p: self.guide_clear(),
             "cloak.ack": lambda client, p: self._cloak.ack(client, p["cloak_id"]),
             "action": self._on_action,
         }
@@ -477,13 +477,20 @@ class ProtocolPresenter(Presenter):
 
     # -- the guide --------------------------------------------------------
 
+    # Escape is claimed here, by the one side that knows the whole picture.
+    # Each overlay window only sees its own screen: when the guide moved from
+    # one screen to the other, one sent "inactive" and the other "active", in
+    # no guaranteed order, and Escape could be let go with a guide on screen.
+
     def guide_point(self, x: float, y: float, label: str) -> None:
         self._emit("guide.point", _point(x, y, label))
+        self.app._grab_escape(True)
 
     def guide_highlight(
         self, left: float, top: float, width: float, height: float, label: str, shape: str
     ) -> None:
         self._emit("guide.highlight", _box(left, top, width, height, label, shape))
+        self.app._grab_escape(True)
 
     def guide_steps(self, steps: list) -> None:
         payload = []
@@ -504,9 +511,11 @@ class ProtocolPresenter(Presenter):
                 }
             payload.append({"text": step.text, "target": target})
         self._emit("guide.steps", {"steps": payload})
+        self.app._grab_escape(True)
 
     def guide_clear(self) -> None:
         self._emit("guide.clear")
+        self.app._grab_escape(False)
 
     # -- windows not ported yet -------------------------------------------
 

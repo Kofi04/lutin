@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write src *.ts *.json src-tauri/*.json src-tauri/capabilities",
-    "check": "tsc --noEmit && vitest run"
+    "check": "tsc --noEmit && vitest run",
+    "playground": "vite --open /playground.html"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1",

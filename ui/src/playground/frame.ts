@@ -1,0 +1,55 @@
+/**
+ * One simulated window: its visibility, and the env and host it hands to the
+ * view and to its CoreClient. Both act on the same state, as in Tauri, where
+ * the view and the cloak hide the same window.
+ */
+
+import { CoreClient } from "../core/client";
+import type { ActionName, Role } from "../protocol";
+import type { WindowEnv } from "../windows/env";
+import type { Hub } from "./hub";
+
+export class Frame {
+  visible: boolean;
+  private listeners = new Set<() => void>();
+  readonly client: CoreClient;
+  readonly env: WindowEnv;
+
+  constructor(
+    hub: Hub,
+    role: Role,
+    visible: boolean,
+    hooks: {
+      togglePanel?: () => void;
+      onTrayAction?: (listener: (name: ActionName) => void) => () => void;
+      log?: (text: string) => void;
+    } = {},
+  ) {
+    this.visible = visible;
+    this.env = {
+      show: () => this.setVisible(true),
+      hide: () => this.setVisible(false),
+      startDragging: () => hooks.log?.(`${role} : glisser (sans effet ici)`),
+      togglePanel: () => hooks.togglePanel?.(),
+      syncOverlays: async () => {},
+      onTrayAction: (listener) => hooks.onTrayAction?.(listener) ?? (() => {}),
+    };
+    const host = hub.host(
+      (v) => this.setVisible(v),
+      () => this.visible,
+    );
+    this.client = new CoreClient(role, host, hub.makeSocket);
+    void this.client.start();
+  }
+
+  setVisible(visible: boolean): void {
+    if (visible === this.visible) return;
+    this.visible = visible;
+    for (const listener of this.listeners) listener();
+  }
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+}

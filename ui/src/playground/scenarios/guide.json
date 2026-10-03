@@ -1,0 +1,71 @@
+{
+  "name": "Le guide sur deux écrans",
+  "description": "Claude pointe sur l'écran principal, surligne sur le second, puis efface.",
+  "screens": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "id": "\\\\.\\DISPLAY2",
+      "width": 1600,
+      "height": 900
+    }
+  ],
+  "steps": [
+    {
+      "at": 0,
+      "type": "connection",
+      "payload": {
+        "state": "online",
+        "detail": ""
+      }
+    },
+    {
+      "at": 0,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    },
+    {
+      "at": 500,
+      "type": "guide.point",
+      "payload": {
+        "screen_id": "\\\\.\\DISPLAY1",
+        "x": 1500,
+        "y": 120,
+        "label": "Le bouton Exporter"
+      }
+    },
+    {
+      "at": 3500,
+      "type": "guide.highlight",
+      "payload": {
+        "screen_id": "\\\\.\\DISPLAY2",
+        "x": 200,
+        "y": 300,
+        "width": 640,
+        "height": 220,
+        "label": "Ce tableau",
+        "shape": "rect"
+      }
+    },
+    {
+      "at": 6500,
+      "type": "guide.point",
+      "payload": {
+        "screen_id": "\\\\.\\DISPLAY2",
+        "x": -0.5,
+        "y": 0,
+        "label": "Coin exact"
+      }
+    },
+    {
+      "at": 9000,
+      "type": "guide.clear",
+      "payload": {}
+    }
+  ]
+}

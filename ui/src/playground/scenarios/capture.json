@@ -1,0 +1,55 @@
+{
+  "name": "Capture à confirmer",
+  "description": "La fenêtre se cache pour la capture, puis l'aperçu attend la confirmation.",
+  "screens": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "steps": [
+    {
+      "at": 0,
+      "type": "connection",
+      "payload": {
+        "state": "online",
+        "detail": ""
+      }
+    },
+    {
+      "at": 0,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    },
+    {
+      "at": 600,
+      "type": "cloak.hide",
+      "payload": {
+        "cloak_id": "c1"
+      }
+    },
+    {
+      "at": 900,
+      "type": "cloak.show",
+      "payload": {
+        "cloak_id": "c1"
+      }
+    },
+    {
+      "at": 1000,
+      "type": "capture.preview",
+      "payload": {
+        "capture_id": "k1",
+        "kind": "region",
+        "label": "Zone 160×100",
+        "width": 160,
+        "height": 100,
+        "tokens": 21,
+        "png_base64": "iVBORw0KGgoAAAANSUhEUgAAAKAAAABkCAIAAACO1KzYAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABWklEQVR4nO3bvWnDUBSAUcu4yx6pTDJUwASPkEGMCWQrV57DcZ0NZPJjSfk4p33NhY/bPD0NT89vK7rWcw/AfQkcJ3CcwHECxwkcJ3CcwHECxwkcJ3CcwHECxw2Xy3XuGbgjGxwncJzAcQLHCRwncJzAcQLHCRy3GT8+HD6mmeNf2O9f5h7h22xwnMBxAscJHCdwnMBxAsd50RFng+MEjhM4TuA4geMEjhM47sb34NPpPM0c/Nh2+zhyaoPjBI4TOE7gOIHjfE2Ks8FxAscJHCdwnMBx7qIXYfw++TdscJzAcQLHCRwncJy76DgbHCdwnMBxAscJHCdwnMBxAscJHCdwnMBxAscJHHfjTdbD626aOf7Q5/F97hEWxAbHCRwncJzAcQLHCRwncJzAcQLHCRwncJzAcQLHCRwncJy/C+NscJzAcQLHCRwncJzAcQLHCRwncJzAcQLHfQFGjhv4O7ZAYAAAAABJRU5ErkJggg=="
+      }
+    }
+  ]
+}

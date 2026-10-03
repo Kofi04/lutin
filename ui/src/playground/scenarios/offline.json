@@ -1,0 +1,58 @@
+{
+  "name": "Le core plante et revient",
+  "description": "Les fenêtres passent hors ligne, puis se reconnectent au core redémarré.",
+  "screens": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "steps": [
+    {
+      "at": 0,
+      "type": "connection",
+      "payload": {
+        "state": "online",
+        "detail": ""
+      }
+    },
+    {
+      "at": 0,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    },
+    {
+      "at": 800,
+      "type": "mood",
+      "payload": {
+        "mood": "working"
+      }
+    },
+    {
+      "at": 2000,
+      "type": "@core.down"
+    },
+    {
+      "at": 5000,
+      "type": "@core.up"
+    },
+    {
+      "at": 6000,
+      "type": "connection",
+      "payload": {
+        "state": "online",
+        "detail": ""
+      }
+    },
+    {
+      "at": 6000,
+      "type": "mood",
+      "payload": {
+        "mood": "calm"
+      }
+    }
+  ]
+}
