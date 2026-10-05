@@ -157,6 +157,12 @@ class ProtocolPresenter(Presenter):
 
     # -- lifecycle --------------------------------------------------------
 
+    def bind(self, app) -> None:
+        super().bind(app)
+        # The session's real state, not a guess: without prewarm it stays
+        # "offline" until the first question and announces nothing before.
+        self._connection = (app.claude.state, "")
+
     def make_cloak(self):
         return self._cloak
 

@@ -384,3 +384,12 @@ def test_no_stdin_no_watch():
     watch = ParentWatch()
     watch._stream = None  # pythonw.exe: sys.stdin is None
     assert not watch.start()
+
+
+def test_a_window_is_told_the_real_claude_state_not_a_guess(core):
+    """Without prewarm the core connects to Claude on the first question and
+    never announces anything before: the window must not be told
+    "connecting" forever."""
+    client = core.test_connect()
+    connection = client.wait_for("connection")
+    assert connection.payload["state"] == core.claude.state == "offline"

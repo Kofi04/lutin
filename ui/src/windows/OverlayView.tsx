@@ -60,8 +60,11 @@ export function OverlayView({
       style={{
         position: "absolute",
         ...box,
-        border: "3px solid #7C7BFF",
-        borderRadius: mark.kind === "box" && mark.at.shape === "rect" ? 8 : 999,
+        border: "3px solid var(--lw-color-accent)",
+        borderRadius:
+          mark.kind === "box" && mark.at.shape === "rect"
+            ? "var(--lw-radius-button)"
+            : "var(--lw-radius-pill)",
         boxSizing: "border-box",
       }}
     >
@@ -73,9 +76,9 @@ export function OverlayView({
             left: 0,
             marginTop: 6,
             padding: "4px 8px",
-            borderRadius: 8,
+            borderRadius: "var(--lw-radius-button)",
             whiteSpace: "nowrap",
-            background: "rgba(16,16,20,0.94)",
+            background: "var(--lw-color-surface)",
           }}
         >
           {at.label}

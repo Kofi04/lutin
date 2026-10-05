@@ -6,11 +6,14 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
 
+import { AvatarCanvas } from "../avatar/AvatarCanvas";
+import { VISUAL_STATES } from "../avatar/state";
 import type { ActionName } from "../protocol";
 import { AvatarView } from "../windows/AvatarView";
 import { OverlayView } from "../windows/OverlayView";
@@ -24,6 +27,87 @@ const SCENARIOS = Object.values(
 );
 /** The two screens drawn at this fraction of their size. */
 const SCREEN_SCALE = 0.32;
+
+/**
+ * The mouse on the page, standing in for the pointer on the desktop: each
+ * move is told to the subscriber, relative to an element's centre, as
+ * env.onPointer does with the cursor that Rust watches.
+ */
+function pointerFrom(element: { current: HTMLElement | null }) {
+  return (listener: (pointer: { dx: number; dy: number }) => void) => {
+    const onMove = (event: MouseEvent) => {
+      const box = element.current?.getBoundingClientRect();
+      if (!box) return;
+      listener({
+        dx: event.clientX - (box.left + box.width / 2),
+        dy: event.clientY - (box.top + box.height / 2),
+      });
+    };
+    addEventListener("mousemove", onMove);
+    return () => removeEventListener("mousemove", onMove);
+  };
+}
+
+/** Every state of DESIGN.md section 4, side by side, at two sizes. */
+function Gallery() {
+  return (
+    <section>
+      <h2
+        style={{ fontSize: "var(--lw-size-title)", fontWeight: 600, margin: "0 0 8px" }}
+      >
+        États de l'avatar
+      </h2>
+      {[56, 112].map((size) => (
+        <div
+          key={size}
+          style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}
+        >
+          {VISUAL_STATES.map((state) => (
+            <GalleryItem key={state} state={state} size={size} />
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function GalleryItem({
+  state,
+  size,
+}: {
+  state: (typeof VISUAL_STATES)[number];
+  size: number;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const pointer = useMemo(() => pointerFrom(box), []);
+  const [hover, setHover] = useState(false);
+  return (
+    <figure style={{ margin: 0, textAlign: "center" }}>
+      <div
+        ref={box}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          background: "var(--lw-stage-desk)",
+          borderRadius: "var(--lw-radius-button)",
+        }}
+      >
+        <AvatarCanvas
+          state={state}
+          size={size}
+          padding={size / 7}
+          hover={hover}
+          onPointer={pointer}
+        />
+      </div>
+      <figcaption
+        style={{ fontSize: "var(--lw-size-meta)", color: "var(--lw-color-text-2)" }}
+      >
+        {state}
+      </figcaption>
+    </figure>
+  );
+}
 
 function useVisible(frame: Frame): boolean {
   return useSyncExternalStore(frame.subscribe, () => frame.visible);
@@ -66,9 +150,11 @@ function Run({
   trayRef: { current: ((name: ActionName) => void) | null };
 }) {
   const hub = useMemo(() => new Hub(), []);
+  const avatarBox = useRef<HTMLDivElement>(null);
   const frames = useMemo(() => {
     const panel = new Frame(hub, "panel", false);
     const avatar = new Frame(hub, "avatar", true, {
+      onPointer: pointerFrom(avatarBox),
       togglePanel: () => panel.setVisible(!panel.visible),
       onTrayAction: (listener) => {
         trayRef.current = listener;
@@ -95,7 +181,15 @@ function Run({
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         <WindowBox frame={frames.avatar} title="Avatar (72 px)">
-          <div style={{ width: 72, height: 72, background: "#2b2d3a", borderRadius: 8 }}>
+          <div
+            ref={avatarBox}
+            style={{
+              width: 72,
+              height: 72,
+              background: "var(--lw-stage-desk)",
+              borderRadius: "var(--lw-radius-button)",
+            }}
+          >
             <AvatarView client={frames.avatar.client} env={frames.avatar.env} />
           </div>
         </WindowBox>
@@ -119,8 +213,8 @@ function Run({
                 width: screen.width * SCREEN_SCALE,
                 height: screen.height * SCREEN_SCALE,
                 overflow: "hidden",
-                background: "linear-gradient(#3a4256, #2a2f3d)",
-                borderRadius: 6,
+                background: "var(--lw-stage-wallpaper)",
+                borderRadius: "var(--lw-radius-button)",
               }}
             >
               <div
@@ -227,7 +321,7 @@ export function Playground() {
           style={{
             margin: 0,
             paddingLeft: 18,
-            fontFamily: "Cascadia Code, monospace",
+            fontFamily: "var(--lw-font-code)",
             fontSize: 11,
           }}
         >
@@ -238,7 +332,8 @@ export function Playground() {
           ))}
         </ol>
       </aside>
-      <main>
+      <main style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <Gallery />
         <Run
           key={run}
           scenario={scenario}

@@ -31,9 +31,13 @@ export function PanelView({ client, env }: { client: CoreClient; env: WindowEnv 
 
   useEffect(() => {
     const off = [
-      client.onAny((message) =>
-        setEvents((list) => [message, ...list].slice(0, MAX_EVENTS)),
-      ),
+      // Not the machine's load: it comes every few seconds, and logging it
+      // re-laid out this window each time, hidden or not (measured in M4).
+      client.onAny((message) => {
+        if (message.type !== "system") {
+          setEvents((list) => [message, ...list].slice(0, MAX_EVENTS));
+        }
+      }),
       // What waits for an answer opens the panel: a hidden approval would
       // only ever time out, a hidden capture could never be confirmed.
       client.on("approval.request", (p) => {
@@ -76,8 +80,9 @@ export function PanelView({ client, env }: { client: CoreClient; env: WindowEnv 
         height: "100%",
         boxSizing: "border-box",
         padding: 12,
-        borderRadius: 18,
-        background: "rgba(16,16,20,0.94)",
+        borderRadius: "var(--lw-radius-panel)",
+        background: "var(--lw-color-surface)",
+        boxShadow: "var(--lw-shadow-panel)",
         display: "flex",
         flexDirection: "column",
         gap: 8,
@@ -87,13 +92,17 @@ export function PanelView({ client, env }: { client: CoreClient; env: WindowEnv 
       <div style={{ opacity: 0.7 }}>Cœur : {status}</div>
 
       {approval && (
-        <div style={{ border: "1px solid #FFB547", borderRadius: 8, padding: 8 }}>
+        <div
+          style={{
+            border: "1px solid var(--lw-color-state-waiting)",
+            borderRadius: "var(--lw-radius-button)",
+            padding: 8,
+          }}
+        >
           <div>
             {approval.tool} {approval.project && `dans ${approval.project}`}
           </div>
-          <code style={{ fontFamily: "Cascadia Code, monospace" }}>
-            {approval.detail}
-          </code>
+          <code style={{ fontFamily: "var(--lw-font-code)" }}>{approval.detail}</code>
           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
             <button onClick={() => answer("deny")}>Refuser</button>
             <button onClick={() => answer("always")}>Toujours</button>
@@ -177,7 +186,7 @@ export function PanelView({ client, env }: { client: CoreClient; env: WindowEnv 
           overflowY: "auto",
           margin: 0,
           paddingLeft: 18,
-          fontFamily: "Cascadia Code, monospace",
+          fontFamily: "var(--lw-font-code)",
           fontSize: 11,
         }}
       >

@@ -22,6 +22,7 @@ export class Frame {
     hooks: {
       togglePanel?: () => void;
       onTrayAction?: (listener: (name: ActionName) => void) => () => void;
+      onPointer?: WindowEnv["onPointer"];
       log?: (text: string) => void;
     } = {},
   ) {
@@ -32,6 +33,7 @@ export class Frame {
       startDragging: () => hooks.log?.(`${role} : glisser (sans effet ici)`),
       togglePanel: () => hooks.togglePanel?.(),
       syncOverlays: async () => {},
+      onPointer: hooks.onPointer ?? (() => () => {}),
       onTrayAction: (listener) => hooks.onTrayAction?.(listener) ?? (() => {}),
     };
     const host = hub.host(

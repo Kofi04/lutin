@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4–M7 à faire — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5–M7 à faire — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -713,6 +713,39 @@ quatre ressorts, réglage « mouvement réduit »).
 l'avatar Qt actuel. Il faudra : ne redessiner que si l'image change (la même
 technique qu'on vient d'appliquer en Python), cadence réduite au repos, arrêt
 complet quand la fenêtre est cachée. À mesurer, pas à supposer.
+
+**Fait (M4)** — Tests : 750 Python, 135 Vitest, 5 Rust.
+
+- `design/tokens.ts` (toutes les valeurs de §3, installées en variables CSS `--lw-*`) et un
+  test qui **échoue si une couleur est écrite ailleurs** ; `design/motion.ts` (les quatre
+  ressorts, `springAt` : la solution exacte d'un ressort, pour qu'une image puisse demander
+  n'importe quel instant ; le réglage « mouvement réduit »).
+- L'avatar en quatre morceaux, dont trois purs et testés : `state.ts` (onze états du tableau
+  §4), `pose.ts` (respiration, clignement, regard, orbe, sauts, hochement ; clé arrondie pour
+  ne peindre que ce qui change), `renderer.ts` (quand repeindre), `draw.ts` (le dessin).
+  Galerie des onze états à deux tailles dans le terrain d'essai.
+- Correction côté core : le presenter annonçait « connexion en cours » sans le savoir ; sans
+  préchauffage, la session Claude reste `offline` jusqu'à la première question et n'émet
+  rien. Il prend désormais l'état réel (testé) ; l'avatar ne s'éteint que si le core donne
+  une raison.
+
+**Le budget CPU, mesuré pas à pas sur l'app réelle** (compteurs internes lus par le protocole
+DevTools de WebView2, mouvements de souris comptés côté Rust) :
+
+| Étape | Interface (WebView2 + shell) |
+|---|---|
+| Premier avatar : 10 tics/s, pointeur demandé 6 fois/s | ~10 % |
+| Pointeur poussé par Rust au lieu d'être demandé | shell 1,85 % → ~0 |
+| 4 tics/s au repos, réveil calé sur le clignement, pas de 0,5 px | — |
+| Le reste du coût n'était pas dans les pages : **chaque image d'une fenêtre transparente est recomposée en entier** | — |
+| **Il se pose** après 60 s sans activité (DESIGN §4, ajouté), regard par paliers | — |
+| L'état « terminé » ne se posait pas (il dure jusqu'à la prochaine session) ; la charge machine comptait comme activité | — |
+| Le fil du curseur réveillait la boucle principale 8 fois/s | shell 0,5 % → 0,02 % |
+| **Au repos, souris immobile** | **WebView2 0,36 %, shell 0,02 %, core 0,02 %** |
+
+Souris en mouvement, le regard coûte encore 2 à 4 % tant que l'avatar est éveillé ; posé, il
+ne suit plus qu'une fois par seconde. Les mesures prises pendant que la machine servait
+étaient faussées : il faut toujours relever les mouvements de souris et les survols avec.
 
 ### Phase M5 — Le panneau et ses états (DESIGN §5)
 

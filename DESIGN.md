@@ -129,6 +129,11 @@ Une seule touche culturelle : une bande de trois motifs géométriques sur le ch
 
 **Vie au repos :** respiration (scale Y 1 → 1.02, 3,5 s), clignement aléatoire toutes les 3–6 s, regard qui suit la souris (pupilles limitées à 30 % du rayon de l'œil).
 
+**Il se pose** (ajouté en M4, principe 3 et budget CPU). Après **60 s sans activité**, respiration et clignements s'arrêtent ; seuls les yeux suivent encore la souris, au plus une fois par seconde. Une activité le réveille aussitôt : un événement qui vous concerne (Claude, une session, le panneau, une capture, le guide) ou un survol. **La charge de la machine n'est pas une activité** : elle change la couleur de l'orbe sans le réveiller. Se posent tous les états sauf deux, « Claude travaille » et « attend l'utilisateur », qui animent tant qu'ils durent. Endormi, le « z » est fixe.
+Pourquoi : chaque image d'une fenêtre transparente au premier plan est recomposée par WebView2 en entier, quelle que soit sa taille. Mesuré : un avatar qui respire en continu coûtait ~10 % d'un cœur ; posé, l'interface entière coûte 0,4 %.
+
+**Regard par paliers :** 16 directions et deux distances (proche, loin), pas de glissement. À 56 px une pupille se déplace de 1,6 px au plus : des pas plus fins ne se voient pas, et chacun coûte une image.
+
 **États** (les humeurs actuelles du core, rendues ainsi) :
 
 | État | Orbe du bâton | Corps / yeux |

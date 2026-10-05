@@ -1,8 +1,11 @@
 import { createRoot } from "react-dom/client";
 
+import { installTokens } from "../design/tokens";
 import { createClient } from "./connect";
 import { OverlayView } from "./OverlayView";
 import { tauriEnv } from "./tauriEnv";
+
+installTokens();
 
 // Which screen this window covers: set by the Rust side in the URL.
 const screenId = new URLSearchParams(location.search).get("screen") ?? "";

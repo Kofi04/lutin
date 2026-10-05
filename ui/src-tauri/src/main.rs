@@ -1,6 +1,7 @@
 // No console window in release builds; in debug the console shows the logs.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cursor;
 mod protect;
 mod supervisor;
 mod tray;
@@ -21,6 +22,7 @@ fn main() {
             windows::create(handle)?;
             tray::create(handle)?;
             supervisor::start(handle.clone());
+            cursor::start(handle.clone());
             Ok(())
         })
         .build(tauri::generate_context!())

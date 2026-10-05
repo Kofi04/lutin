@@ -1,4 +1,4 @@
-/* Phase M2: just enough to see the windows. The design tokens are phase M4. */
+/* The values come from design/tokens.ts, installed as --lw-* variables. */
 html,
 body,
 #root {
@@ -6,8 +6,8 @@ body,
   height: 100%;
   background: transparent;
   overflow: hidden;
-  font-family: "Segoe UI Variable", "Segoe UI", Inter, sans-serif;
-  font-size: 13px;
-  color: #f4f4f6;
+  font-family: var(--lw-font-ui);
+  font-size: var(--lw-size-body);
+  color: var(--lw-color-text);
   user-select: none;
 }

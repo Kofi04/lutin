@@ -709,11 +709,17 @@ Measured on this machine: the core ready 2.3–9.6 s after launch; after a
 simulated crash of the core, the windows reconnected to its new port; after a
 simulated crash of Tauri, the core left on its own in 6–7 s. **Memory: about
 550 MB in all**, of which ~240 MB for WebView2 (9 processes), ~145 MB for the
-Python processes and ~135 MB for the Claude Code process. **Idle CPU: 4.2–4.4 %
-of one core in all** (two 100 s windows, production frontend): the core 0.08 %,
-the Tauri shell 0.03 %, WebView2 1.8 %, Claude Code 2.2–2.5 %. WebView2's share
-is with placeholder pages that redraw their event log on every message; the
-budget is worked on in phase M4.
+Python processes and ~135 MB for the Claude Code process.
+
+**Idle CPU, with the drawn avatar (phase M4)**, mouse still, production
+frontend: WebView2 0.36 %, the Tauri shell 0.02 %, the core 0.02 % of one
+core, plus the warm Claude Code process (0.6–1 % that run). Getting there took
+measuring inside WebView2: every frame of a transparent always-on-top window is
+recomposed in full, however small, so the avatar **settles** after a quiet
+minute (no breathing, no blinking; DESIGN.md section 4), its eyes move in 16
+directions rather than glide, and the cursor is pushed by a Rust thread only
+when it moves. While the mouse is in use the gaze still costs 2–4 % until he
+settles.
 
 ### The playground (phase M3)
 
