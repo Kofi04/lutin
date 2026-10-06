@@ -481,3 +481,47 @@ export function ToastView({
     </div>
   );
 }
+
+// -- a tutorial's steps (DESIGN.md section 6) --------------------------------
+
+export function StepsCard({
+  texts,
+  index,
+  onGo,
+  onDone,
+}: {
+  texts: string[];
+  index: number;
+  onGo(index: number): void;
+  onDone(): void;
+}) {
+  const last = index === texts.length - 1;
+  return (
+    <div className="lw-surface" style={{ width: 520 }} role="group" aria-label="Étapes">
+      <div className="lw-section">
+        <div className="lw-meta">
+          Étape {index + 1} sur {texts.length}
+        </div>
+        <div className="lw-title">{texts[index]}</div>
+      </div>
+      <div className="lw-section lw-row" style={{ justifyContent: "flex-end" }}>
+        <button
+          className="lw-button"
+          disabled={index === 0}
+          onClick={() => onGo(index - 1)}
+        >
+          Précédent
+        </button>
+        {last ? (
+          <button className="lw-button accent" onClick={onDone}>
+            Terminer
+          </button>
+        ) : (
+          <button className="lw-button accent" onClick={() => onGo(index + 1)}>
+            Suivant
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

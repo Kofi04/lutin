@@ -18,6 +18,9 @@ fn main() {
             windows::panel_place,
             windows::panel_show,
             windows::window_visible,
+            windows::avatar_anchor,
+            cursor::cursor_listen,
+            cursor::cursor_now,
             windows::overlays_sync,
         ])
         .setup(|app| {

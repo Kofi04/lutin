@@ -27,6 +27,7 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
   const [claude, setClaude] = useState("idle");
   const [hidden, setHidden] = useState(false);
   const [hover, setHover] = useState(false);
+  const [guiding, setGuiding] = useState(false);
   const [pending, setPending] = useState<{
     id: string;
     deadline: number;
@@ -47,6 +48,10 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
       ),
       client.on("quiet", (p) => setHidden(p.on)),
       client.on("avatar.toggle", () => setHidden((h) => !h)),
+      client.on("guide.point", () => setGuiding(true)),
+      client.on("guide.highlight", () => setGuiding(true)),
+      client.on("guide.steps", () => setGuiding(true)),
+      client.on("guide.clear", () => setGuiding(false)),
       client.on("approval.request", (p) =>
         setPending({
           id: p.request_id,
@@ -122,6 +127,7 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
           state={state}
           hover={hover}
           settled={settled}
+          guiding={guiding}
           active={!hidden}
           onPointer={env.onPointer}
         />

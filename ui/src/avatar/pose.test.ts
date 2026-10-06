@@ -215,3 +215,8 @@ describe("the gaze in steps", () => {
     expect(near.pupilX).toBeLessThan(MAX_PUPIL);
   });
 });
+
+it("the orb is dark while the guide cursor is out (DESIGN.md section 6)", () => {
+  expect(at(0, { guiding: true }).orbIntensity).toBe(0);
+  expect(at(0, { state: "working", guiding: true }).orbIntensity).toBe(0);
+});

@@ -251,3 +251,22 @@ describe("an answer starting by itself", () => {
     expect(run({ type: "stream.start" }).view).toBe("hidden");
   });
 });
+
+describe("a tutorial's steps (DESIGN.md section 6: Previous / Next in the panel)", () => {
+  it("shows the steps, keeps the window up, and stays within them", () => {
+    let s = run({ type: "guide.steps", texts: ["Ouvre", "Clique", "Exporte"] });
+    expect([s.guide, windowVisible(s)]).toEqual([
+      { texts: ["Ouvre", "Clique", "Exporte"], index: 0 },
+      true,
+    ]);
+    s = reduce(s, { type: "guide.step", index: 5 });
+    expect(s.guide?.index).toBe(2);
+    s = reduce(s, { type: "guide.step", index: -1 });
+    expect(s.guide?.index).toBe(0);
+  });
+
+  it("goes when the core clears the guide", () => {
+    const s = run({ type: "guide.steps", texts: ["a"] }, { type: "guide.clear" });
+    expect([s.guide, windowVisible(s)]).toEqual([null, false]);
+  });
+});

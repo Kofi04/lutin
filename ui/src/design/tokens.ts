@@ -39,6 +39,14 @@ export const figure = {
   stressed: "#FF9A3D",
 } as const;
 
+/** The guide cursor (DESIGN.md section 6). */
+export const guide = {
+  /** White outline: visible on light and dark backgrounds alike. */
+  stroke: "#FFFFFF",
+  /** The rest of the screen, around a highlight. */
+  scrim: "rgba(0,0,0,0.35)",
+} as const;
+
 /** The playground's desk and screens: not part of the app. */
 export const stage = {
   page: "#1B1D24",
@@ -83,6 +91,7 @@ export function cssVariables(): Record<string, string> {
   };
   add("color", colors);
   add("stage", stage);
+  add("guide", guide);
   add("radius", radii, "px");
   add("space", space, "px");
   add("shadow", shadows);

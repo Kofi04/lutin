@@ -16,8 +16,9 @@ import { AvatarCanvas } from "../avatar/AvatarCanvas";
 import { VISUAL_STATES } from "../avatar/state";
 import type { ActionName } from "../protocol";
 import { AvatarView } from "../windows/AvatarView";
-import { OverlayView } from "../windows/OverlayView";
+import { GuideOverlay } from "../guide/GuideOverlay";
 import { Panel } from "../panel/Panel";
+import { Desk } from "./desk";
 import { Frame } from "./frame";
 import { Hub, type SentCommand } from "./hub";
 import { play, type Scenario } from "./scenario";
@@ -152,10 +153,12 @@ function Run({
   const hub = useMemo(() => new Hub(), []);
   const avatarBox = useRef<HTMLDivElement>(null);
   const [panelSize, setPanelSize] = useState({ width: 552, height: 140 });
+  const desk = useMemo(() => new Desk(scenario.screens, SCREEN_SCALE), [scenario]);
   const frames = useMemo(() => {
     // The avatar's click reaches the panel as Tauri's "panel://toggle" does.
     const toggles = new Set<() => void>();
     const panel = new Frame(hub, "panel", false, {
+      desk,
       onPanelToggle: (listener) => {
         toggles.add(listener);
         return () => toggles.delete(listener);
@@ -163,6 +166,7 @@ function Run({
       onSize: (width, height) => setPanelSize({ width, height }),
     });
     const avatar = new Frame(hub, "avatar", true, {
+      desk,
       onPointer: pointerFrom(avatarBox),
       togglePanel: () => toggles.forEach((toggle) => toggle()),
       onTrayAction: (listener) => {
@@ -172,10 +176,17 @@ function Run({
     });
     const overlays = scenario.screens.map((screen) => ({
       screen,
-      frame: new Frame(hub, "overlay", false),
+      frame: new Frame(hub, "overlay", false, { desk }),
     }));
     return { avatar, panel, overlays };
-  }, [hub, scenario, trayRef]);
+  }, [hub, scenario, trayRef, desk]);
+
+  // The page's mouse over a pretend screen is the pointer on that screen.
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => desk.mouse(event.clientX, event.clientY);
+    addEventListener("mousemove", onMove);
+    return () => removeEventListener("mousemove", onMove);
+  }, [desk]);
 
   useEffect(() => hub.onCommand(onCommand), [hub, onCommand]);
   useEffect(() => {
@@ -229,6 +240,9 @@ function Run({
             title={`Écran ${screen.id} (${screen.width} × ${screen.height})`}
           >
             <div
+              ref={(element) => {
+                if (element) desk.boxes.set(screen.id, element);
+              }}
               style={{
                 width: screen.width * SCREEN_SCALE,
                 height: screen.height * SCREEN_SCALE,
@@ -246,7 +260,11 @@ function Run({
                   transformOrigin: "0 0",
                 }}
               >
-                <OverlayView client={frame.client} env={frame.env} screenId={screen.id} />
+                <GuideOverlay
+                  client={frame.client}
+                  env={frame.env}
+                  screenId={screen.id}
+                />
               </div>
             </div>
           </WindowBox>

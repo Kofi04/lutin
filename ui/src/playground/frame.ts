@@ -7,6 +7,7 @@
 import { CoreClient } from "../core/client";
 import type { ActionName, Role } from "../protocol";
 import type { WindowEnv } from "../windows/env";
+import type { Desk } from "./desk";
 import type { Hub } from "./hub";
 
 export class Frame {
@@ -25,6 +26,7 @@ export class Frame {
       onPointer?: WindowEnv["onPointer"];
       onPanelToggle?: WindowEnv["onPanelToggle"];
       onSize?: (width: number, height: number) => void;
+      desk?: Desk;
       log?: (text: string) => void;
     } = {},
   ) {
@@ -40,6 +42,13 @@ export class Frame {
       showPanel: () => this.setVisible(true),
       onPanelToggle: hooks.onPanelToggle ?? (() => () => {}),
       onTrayAction: (listener) => hooks.onTrayAction?.(listener) ?? (() => {}),
+      monitors: async () => [],
+      onCursor: () => () => {},
+      cursorNow: async () => null,
+      avatarAnchor: async () => null,
+      broadcast: () => {},
+      onBroadcast: () => () => {},
+      ...hooks.desk?.env(),
     };
     const host = hub.host(
       (v) => this.setVisible(v),

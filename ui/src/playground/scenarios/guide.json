@@ -1,6 +1,6 @@
 {
   "name": "Le guide sur deux écrans",
-  "description": "Claude pointe sur l'écran principal, surligne sur le second, puis efface.",
+  "description": "Survolez un écran : le curseur réfléchit, parle, puis s'envole, surligne sur le second écran et enchaîne trois étapes.",
   "screens": [
     {
       "id": "\\\\.\\DISPLAY1",
@@ -30,7 +30,33 @@
       }
     },
     {
-      "at": 500,
+      "at": 600,
+      "type": "stream.start",
+      "payload": {}
+    },
+    {
+      "at": 1600,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "Le bouton Exporter\n"
+      }
+    },
+    {
+      "at": 2000,
+      "type": "stream.chunk",
+      "payload": {
+        "text": "est en haut à droite."
+      }
+    },
+    {
+      "at": 2600,
+      "type": "stream.end",
+      "payload": {
+        "status": "Terminé"
+      }
+    },
+    {
+      "at": 3000,
       "type": "guide.point",
       "payload": {
         "screen_id": "\\\\.\\DISPLAY1",
@@ -40,7 +66,7 @@
       }
     },
     {
-      "at": 3500,
+      "at": 6500,
       "type": "guide.highlight",
       "payload": {
         "screen_id": "\\\\.\\DISPLAY2",
@@ -53,17 +79,42 @@
       }
     },
     {
-      "at": 6500,
-      "type": "guide.point",
+      "at": 9500,
+      "type": "guide.steps",
       "payload": {
-        "screen_id": "\\\\.\\DISPLAY2",
-        "x": -0.5,
-        "y": 0,
-        "label": "Coin exact"
+        "steps": [
+          {
+            "text": "Ouvre le menu Fichier",
+            "target": {
+              "kind": "point",
+              "screen_id": "\\\\.\\DISPLAY1",
+              "x": 40,
+              "y": 30,
+              "label": "Fichier"
+            }
+          },
+          {
+            "text": "Lis l'avertissement",
+            "target": null
+          },
+          {
+            "text": "Clique sur Exporter",
+            "target": {
+              "kind": "highlight",
+              "screen_id": "\\\\.\\DISPLAY2",
+              "x": 1200,
+              "y": 700,
+              "width": 180,
+              "height": 60,
+              "label": "Exporter",
+              "shape": "rect"
+            }
+          }
+        ]
       }
     },
     {
-      "at": 9000,
+      "at": 30000,
       "type": "guide.clear",
       "payload": {}
     }

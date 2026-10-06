@@ -752,6 +752,16 @@ Its states are a pure, tested reducer (`ui/src/panel/machine.ts`).
 - **An approval cannot be dismissed by a click on the avatar**, since it would
   then time out unseen: Escape answers it (refuse).
 
+### The guide cursor (phase M6)
+
+When Claude points at something, a small cursor leaves the avatar's orb and
+flies there (a curved path, 450 to 900 ms), rings twice and says what to do;
+a tutorial walks step by step, with Previous / Next in the panel. It lives in
+one click-through overlay per screen, drawn only while it has something to
+show: at rest the overlays are hidden and receive nothing. Measured with the
+panel and the guide in place, mouse still: **0.76 % of one core for the whole
+app, the warm Claude Code process included**.
+
 ## Known limits
 
 - Windows only. The modules import cleanly elsewhere (the Win32 calls degrade to

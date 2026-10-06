@@ -65,6 +65,8 @@ export interface PanelState {
   selection: Selection | null;
   toasts: Toast[];
   nextToast: number;
+  /** A tutorial on screen: its steps, for Previous / Next (DESIGN.md section 6). */
+  guide: { texts: string[]; index: number } | null;
 }
 
 export const initial: PanelState = {
@@ -78,6 +80,7 @@ export const initial: PanelState = {
   selection: null,
   toasts: [],
   nextToast: 1,
+  guide: null,
 };
 
 export type PanelEvent =
@@ -95,6 +98,9 @@ export type PanelEvent =
   | { type: "selection.menu"; payload: CorePayloads["selection.menu"] }
   | { type: "selection.result"; payload: CorePayloads["selection.result"] }
   | { type: "toast"; payload: CorePayloads["toast"] }
+  | { type: "guide.steps"; texts: string[] }
+  | { type: "guide.clear" }
+  | { type: "guide.step"; index: number }
   // From the user.
   | { type: "toggle" }
   | { type: "escape" }
@@ -245,6 +251,23 @@ export function reduce(state: PanelState, event: PanelEvent): PanelState {
       const toasts = [toast, ...state.toasts].slice(0, MAX_TOASTS);
       return { ...state, toasts, nextToast: state.nextToast + 1 };
     }
+    case "guide.steps":
+      return {
+        ...state,
+        guide: event.texts.length ? { texts: event.texts, index: 0 } : null,
+      };
+    case "guide.step":
+      if (!state.guide) return state;
+      return {
+        ...state,
+        guide: {
+          ...state.guide,
+          index: Math.min(Math.max(0, event.index), state.guide.texts.length - 1),
+        },
+      };
+    case "guide.clear":
+      return { ...state, guide: null };
+
     case "toast.dismiss":
       return { ...state, toasts: state.toasts.filter((t) => t.id !== event.id) };
 
@@ -282,5 +305,5 @@ export function reduce(state: PanelState, event: PanelEvent): PanelState {
 
 /** The window is on screen for a view, or for toasts alone. */
 export function windowVisible(state: PanelState): boolean {
-  return state.view !== "hidden" || state.toasts.length > 0;
+  return state.view !== "hidden" || state.toasts.length > 0 || state.guide !== null;
 }

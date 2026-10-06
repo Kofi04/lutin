@@ -18,6 +18,8 @@ export interface AvatarCanvasProps {
   /** Room around the figure for the halo and the jumps. */
   padding?: number;
   hover?: boolean;
+  /** The guide cursor is out: the orb is dark. */
+  guiding?: boolean;
   /** A quiet minute has passed: breathing and blinking stop. */
   settled?: boolean;
   /** False stops every timer, as when the window is hidden. */
@@ -32,6 +34,7 @@ export function AvatarCanvas({
   padding = 8,
   hover = false,
   settled = false,
+  guiding = false,
   active = true,
   onPointer,
 }: AvatarCanvasProps) {
@@ -75,6 +78,7 @@ export function AvatarCanvas({
   useEffect(() => rendererRef.current?.setState(state), [state]);
   useEffect(() => rendererRef.current?.setHover(hover), [hover]);
   useEffect(() => rendererRef.current?.setSettled(settled), [settled]);
+  useEffect(() => rendererRef.current?.setGuiding(guiding), [guiding]);
 
   // The eyes listen to the pointer only when they can use it.
   const watching =

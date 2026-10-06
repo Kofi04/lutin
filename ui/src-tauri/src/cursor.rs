@@ -5,16 +5,37 @@
 //! caused. Here a thread reads the cursor itself (a cheap system call, no
 //! message to the page) and tells the avatar only when it has moved, and only
 //! while the avatar is on screen. A still mouse costs nothing.
+//!
+//! The guide cursor (DESIGN.md section 6) follows the pointer more closely,
+//! but only while an overlay asks for it (`cursor_listen`): at rest nothing
+//! is sent to the overlays at all.
 
+use std::collections::HashSet;
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::windows::AVATAR;
+use crate::windows::{AVATAR, OVERLAY_PREFIX};
 
 const PERIOD: Duration = Duration::from_millis(120);
+/// While the guide follows the pointer: smooth enough for a cursor beside it.
+const GUIDE_PERIOD: Duration = Duration::from_millis(40);
+const GUIDE_MIN_MOVE: i32 = 3;
+
+/// The overlays showing the guide, which want the pointer. A set, not a
+/// flag: with two screens, one overlay stopping must not cut the other off.
+static GUIDE_LISTENERS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
+fn guiding() -> bool {
+    GUIDE_LISTENERS
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|set| !set.is_empty())
+}
 /// Smaller moves are not worth waking the page for: the eyes look in one of
 /// 16 directions (pose.ts), which a few pixels never change.
 const MIN_MOVE: i32 = 12;
@@ -27,9 +48,13 @@ pub struct Cursor {
 
 /// True when the pointer moved far enough to be worth telling.
 fn moved(last: Option<Cursor>, now: Cursor) -> bool {
+    moved_by(last, now, MIN_MOVE)
+}
+
+fn moved_by(last: Option<Cursor>, now: Cursor, step: i32) -> bool {
     match last {
         None => true,
-        Some(last) => (now.x - last.x).abs() >= MIN_MOVE || (now.y - last.y).abs() >= MIN_MOVE,
+        Some(last) => (now.x - last.x).abs() >= step || (now.y - last.y).abs() >= step,
     }
 }
 
@@ -53,6 +78,7 @@ fn read() -> Option<Cursor> {
 pub fn start(app: AppHandle) {
     thread::spawn(move || {
         let mut last = None;
+        let mut last_guide = None;
         // Debug builds report how many moves reached the page, to tell an
         // idle measurement from one taken while the mouse was in use.
         let mut told = 0u32;
@@ -63,11 +89,22 @@ pub fn start(app: AppHandle) {
                 told = 0;
                 since = Instant::now();
             }
-            thread::sleep(PERIOD);
+            let guiding = guiding();
+            thread::sleep(if guiding { GUIDE_PERIOD } else { PERIOD });
             // The cursor first: reading it is a system call, while asking
             // whether the avatar is visible wakes the app's main loop. A still
             // mouse must cost nothing (measured: 0.5 % of a core otherwise).
             let Some(now) = read() else { continue };
+            if guiding && moved_by(last_guide, now, GUIDE_MIN_MOVE) {
+                last_guide = Some(now);
+                for (label, _) in app.webview_windows() {
+                    if label.starts_with(OVERLAY_PREFIX) {
+                        let _ = app.emit_to(label.as_str(), "cursor://moved", now);
+                    }
+                }
+            } else if !guiding {
+                last_guide = None;
+            }
             if !moved(last, now) {
                 continue;
             }
@@ -82,6 +119,24 @@ pub fn start(app: AppHandle) {
             told += 1;
         }
     });
+}
+
+/// An overlay starts or stops following the pointer.
+#[tauri::command]
+pub fn cursor_listen(window: tauri::WebviewWindow, listen: bool) {
+    let mut listeners = GUIDE_LISTENERS.lock().unwrap();
+    let set = listeners.get_or_insert_with(HashSet::new);
+    if listen {
+        set.insert(window.label().to_string());
+    } else {
+        set.remove(window.label());
+    }
+}
+
+/// Where the pointer is now, physical pixels: once, when the guide appears.
+#[tauri::command]
+pub fn cursor_now() -> Option<Cursor> {
+    read()
 }
 
 #[cfg(test)]

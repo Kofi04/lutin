@@ -24,6 +24,7 @@ import {
   CaptureView,
   SelectionView,
   ToastView,
+  StepsCard,
 } from "./views";
 
 /** Space around the surface for its shadow, as in panel.css. */
@@ -70,6 +71,10 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
         dispatch({ type: "selection.result", payload }),
       ),
       client.on("toast", (payload) => dispatch({ type: "toast", payload })),
+      client.on("guide.steps", (p) =>
+        dispatch({ type: "guide.steps", texts: p.steps.map((step) => step.text) }),
+      ),
+      client.on("guide.clear", () => dispatch({ type: "guide.clear" })),
       env.onPanelToggle(() => dispatch({ type: "toggle" })),
     ];
     return () => off.forEach((stop) => stop());
@@ -135,6 +140,16 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
   }, [state.view, decideApproval, decideCapture]);
 
   // -- the window -----------------------------------------------------------
+  // The overlays show the answer beside the pointer only while the panel is
+  // closed: one surface at a time (DESIGN.md principle 1).
+  const open = state.view !== "hidden";
+  useEffect(() => env.broadcast("panel", open), [open, env]);
+
+  const goToStep = (index: number) => {
+    dispatch({ type: "guide.step", index });
+    env.broadcast("guide.step", index);
+  };
+
   const visible = windowVisible(state);
   useEffect(() => {
     if (visible)
@@ -195,6 +210,14 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
               </motion.div>
             ))}
           </AnimatePresence>
+          {state.guide && (
+            <StepsCard
+              texts={state.guide.texts}
+              index={state.guide.index}
+              onGo={goToStep}
+              onDone={() => send("guide.done", {})}
+            />
+          )}
           <AnimatePresence mode="wait" initial={false}>
             {view !== "hidden" && (
               <motion.div

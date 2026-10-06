@@ -52,6 +52,7 @@ export class AvatarRenderer {
   private stateSince: number;
   private hover = false;
   private settled = false;
+  private guiding = false;
   private target: { dx: number; dy: number } | null = null;
   /** The pointer the eyes show: the target, or a second behind when settled. */
   private gaze: { dx: number; dy: number } | null = null;
@@ -80,6 +81,13 @@ export class AvatarRenderer {
 
   setHover(hover: boolean): void {
     this.hover = hover;
+    this.wake();
+  }
+
+  /** The guide cursor is out (true) or back (false). */
+  setGuiding(guiding: boolean): void {
+    if (guiding === this.guiding) return;
+    this.guiding = guiding;
     this.wake();
   }
 
@@ -156,6 +164,7 @@ export class AvatarRenderer {
       hover: this.hover,
       reducedMotion: still,
       settled: this.settled && SETTLING_STATES.has(this.state),
+      guiding: this.guiding,
     };
     const frame = pose(now, ctx);
     const key = poseKey(frame);

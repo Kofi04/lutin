@@ -13,7 +13,7 @@ use crate::protect;
 
 pub const AVATAR: &str = "avatar";
 pub const PANEL: &str = "panel";
-const OVERLAY_PREFIX: &str = "overlay-";
+pub const OVERLAY_PREFIX: &str = "overlay-";
 
 /// DESIGN.md section 4: a 56 px figure in a 72 px window.
 const AVATAR_SIZE: f64 = 72.0;
@@ -248,6 +248,21 @@ pub fn panel_place(app: AppHandle, width: f64, height: f64) -> Result<(), String
 #[tauri::command]
 pub fn panel_show(app: AppHandle, focus: bool) -> Result<(), String> {
     show_panel(&app, focus).map_err(|e| e.to_string())
+}
+
+/// Where the guide cursor is born: the orb at the tip of the avatar's staff,
+/// physical pixels of the desktop (DESIGN.md section 6).
+#[tauri::command]
+pub fn avatar_anchor(app: AppHandle) -> Option<crate::cursor::Cursor> {
+    let avatar = app.get_webview_window(AVATAR)?;
+    let at = avatar.outer_position().ok()?;
+    let scale = avatar.scale_factor().ok()?;
+    // The orb, in the window's CSS pixels: 8 of padding, then (49, 15) on
+    // the 56-wide figure (avatar/draw.ts).
+    Some(crate::cursor::Cursor {
+        x: at.x + (57.0 * scale).round() as i32,
+        y: at.y + (23.0 * scale).round() as i32,
+    })
 }
 
 /// For the pages: show or hide the window that asks (WindowEnv, the cloak).

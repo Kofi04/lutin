@@ -49,6 +49,8 @@ export interface PoseContext {
    * gaze (DESIGN.md section 1, principle 3, and section 4).
    */
   settled?: boolean;
+  /** The guide cursor is out: it left from the orb, which stays dark. */
+  guiding?: boolean;
 }
 
 /** DESIGN.md section 4: pupils limited to 30 % of the eye's radius. */
@@ -195,6 +197,9 @@ export function pose(nowMs: number, ctx: PoseContext): Pose {
       break;
   }
   if (ctx.hover && orbIntensity > 0) orbIntensity = Math.min(1, orbIntensity + 0.15);
+  // DESIGN.md section 6: the cursor is born from the orb; it is dark until
+  // the cursor comes back.
+  if (ctx.guiding) orbIntensity = 0;
 
   // -- what happens once -----------------------------------------------
   let liftY = 0;

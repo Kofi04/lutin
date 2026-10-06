@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { springAt, springs } from "./motion";
-import { colors, cssVariables, figure, stage } from "./tokens";
+import { colors, cssVariables, figure, guide, stage } from "./tokens";
 
 const SRC = join(import.meta.dirname, "..");
 
@@ -32,7 +32,15 @@ describe("tokens", () => {
     expect(vars["--lw-radius-panel"]).toBe("18px");
     expect(vars["--lw-weight-semibold"]).toBe("600");
     expect(Object.keys(vars)).toHaveLength(
-      Object.keys(colors).length + Object.keys(stage).length + 4 + 6 + 1 + 2 + 4 + 3,
+      Object.keys(colors).length +
+        Object.keys(stage).length +
+        Object.keys(guide).length +
+        4 +
+        6 +
+        1 +
+        2 +
+        4 +
+        3,
     );
   });
 

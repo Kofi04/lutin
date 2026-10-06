@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau ; vérification dans l'app réelle en attente, voir M5) · M6–M7 à faire — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau) · M6 ✅ (curseur guide) · M6 bis, M7 à faire — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -816,6 +816,36 @@ réduit → pas de vol, simple fondu.
 abonnement actif **seulement** en mode `follow`, jamais au repos, sinon le budget
 CPU saute. Le vol entre deux écrans de facteurs d'échelle différents. La précision
 par UI Automation (§6) est explicitement une phase ultérieure.
+
+**Fait (M6)** — Tests : 751 Python, 230 Vitest, 5 Rust.
+
+- `guide/coords.ts` : **la** conversion bureau (pixels physiques) → fenêtre overlay, testée de
+  100 à 200 % et sur un écran à coordonnées négatives ; les points du core sont déjà en pixels
+  logiques de l'écran, donc tels quels.
+- `guide/flight.ts` : Bézier quadratique (contrôle au milieu, décalé de 25 % vers le haut),
+  durée clamp(450 + d × 0,35, 450, 900), ease-in-out, inclinaison selon la tangente qui se
+  redresse à l'arrivée, 4 fantômes (aucun en mouvement réduit).
+- `guide/machine.ts` : hidden / follow / thinking / talking / flying / pointing / steps /
+  returning, en réducteur pur. Chaque overlay le fait tourner sur les mêmes événements et ne
+  dessine que son écran ; d'un écran à l'autre, fondu sortant puis entrant.
+- `GuideOverlay.tsx` (remplace l'overlay provisoire), carte d'étapes dans le panneau, orbe de
+  l'avatar éteinte pendant le guidage. Rust : `cursor_listen` (ensemble des overlays qui
+  écoutent : avec deux écrans, l'un qui arrête ne coupe pas l'autre), `cursor_now`,
+  `avatar_anchor`. Décisions inscrites dans DESIGN §6.
+- Un vrai problème évité en traçant le cycle : une cible expirant **localement** aurait laissé
+  le core réserver Esc indéfiniment et l'orbe éteinte ; l'overlay concerné envoie `guide.done`.
+
+Vérifié dans le terrain d'essai (navigateur) : surlignage sur le second écran, premier écran
+caché, orbe éteinte ; carte « Étape 1 sur 3 », Suivant → « 2/3 » (étape sans cible : le curseur
+reste) → « 3/3 » sur l'autre écran ; Terminer envoie `guide.done`. **Dans l'app réelle**, CPU au
+repos avec panneau et guide en place, souris immobile, deux mesures : WebView2 0,26–0,31 %,
+shell 0–0,02 %, core 0,02–0,07 %, **0,76–0,77 % au total Claude compris**. Non vérifié dans
+l'app réelle : un vrai pointage par Claude (il faut une session Claude connectée qui appelle
+`point_at`), et le vol entre deux écrans à facteurs d'échelle différents (une seule machine,
+un seul écran ici).
+
+Le dossier `target/embedded` a été reconstruit (18 min, une seule tâche à la fois : avec 3,7 Go
+de RAM, la compilation parallèle de la crate `tauri` fait planter rustc).
 
 ### Phase M6 bis — Fenêtres secondaires (proposée, voir plus haut)
 

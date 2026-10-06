@@ -6,6 +6,7 @@
  * the playground show the real views, not look-alikes.
  */
 
+import type { Monitor, Point } from "../guide/coords";
 import type { ActionName } from "../protocol";
 
 export interface WindowEnv {
@@ -26,6 +27,18 @@ export interface WindowEnv {
   showPanel(focus: boolean): void;
   /** The avatar was clicked (or the tray icon): the panel decides. */
   onPanelToggle(listener: () => void): () => void;
+  // -- the guide (DESIGN.md section 6) --
+  /** Every monitor, in physical pixels of the desktop. */
+  monitors(): Promise<Monitor[]>;
+  /** The pointer's moves, physical pixels, for as long as subscribed. */
+  onCursor(listener: (at: Point) => void): () => void;
+  /** Where the pointer is now, physical pixels. */
+  cursorNow(): Promise<Point | null>;
+  /** The avatar's orb, physical pixels: where the guide cursor is born. */
+  avatarAnchor(): Promise<Point | null>;
+  /** A message to our other windows (the panel's step buttons). */
+  broadcast(name: string, payload: unknown): void;
+  onBroadcast(name: string, listener: (payload: unknown) => void): () => void;
   /** Tray entries that are core actions, for the avatar to send. */
   onTrayAction(listener: (name: ActionName) => void): () => void;
 }

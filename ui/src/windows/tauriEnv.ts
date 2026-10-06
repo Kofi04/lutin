@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { emit, listen } from "@tauri-apps/api/event";
+import { availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { ActionName } from "../protocol";
 import type { WindowEnv } from "./env";
@@ -52,6 +52,34 @@ export const tauriEnv: WindowEnv = {
   showPanel: (focus) => void invoke("panel_show", { focus }),
   onPanelToggle(listener) {
     const unlisten = listen("panel://toggle", () => listener());
+    return () => void unlisten.then((stop) => stop());
+  },
+  async monitors() {
+    return (await availableMonitors()).map((m, index) => ({
+      id: m.name ?? `screen-${index}`,
+      x: m.position.x,
+      y: m.position.y,
+      width: m.size.width,
+      height: m.size.height,
+      scale: m.scaleFactor,
+    }));
+  },
+  onCursor(listener) {
+    // Rust sends the moves only while some overlay listens (cursor.rs).
+    void invoke("cursor_listen", { listen: true });
+    const unlisten = listen<{ x: number; y: number }>("cursor://moved", (event) =>
+      listener(event.payload),
+    );
+    return () => {
+      void invoke("cursor_listen", { listen: false });
+      void unlisten.then((stop) => stop());
+    };
+  },
+  cursorNow: () => invoke<{ x: number; y: number } | null>("cursor_now"),
+  avatarAnchor: () => invoke<{ x: number; y: number } | null>("avatar_anchor"),
+  broadcast: (name, payload) => void emit(`lw://${name}`, payload),
+  onBroadcast(name, listener) {
+    const unlisten = listen(`lw://${name}`, (event) => listener(event.payload));
     return () => void unlisten.then((stop) => stop());
   },
   onTrayAction(listener) {

@@ -1,0 +1,128 @@
+/* The guide cursor (DESIGN.md section 6). Every value is a --lw-* token. */
+
+.lw-guide-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* the window lets clicks through anyway */
+  overflow: hidden;
+}
+
+.lw-guide-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  /* The tip of the arrow is the point. */
+  transform-origin: 0 0;
+  filter: drop-shadow(0 0 6px var(--lw-color-accent));
+}
+.lw-guide-cursor path {
+  fill: var(--lw-color-accent);
+  stroke: var(--lw-guide-stroke);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+
+.lw-guide-ghost {
+  filter: none;
+}
+
+.lw-guide-dots {
+  position: absolute;
+  left: 26px;
+  top: 14px;
+  display: flex;
+  gap: 4px;
+}
+.lw-guide-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--lw-radius-pill);
+  background: var(--lw-color-accent);
+  animation: lw-breathe 1.2s ease-in-out infinite;
+}
+.lw-guide-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.lw-guide-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes lw-breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.lw-guide-bubble,
+.lw-guide-label {
+  position: absolute;
+  left: 28px;
+  top: 18px;
+  max-width: 280px;
+  padding: var(--lw-space-2) var(--lw-space-3);
+  background: var(--lw-color-surface);
+  border: 1px solid var(--lw-color-border);
+  border-radius: var(--lw-radius-field);
+  box-shadow: var(--lw-shadow-panel);
+  color: var(--lw-color-text);
+  font-size: var(--lw-size-body);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  /* Three lines; the rest is in the panel. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lw-guide-label {
+  white-space: nowrap;
+  display: block;
+}
+
+.lw-guide-ring {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--lw-radius-pill);
+  border: 2px solid var(--lw-color-accent);
+  animation: lw-ring 0.7s ease-out 2;
+  opacity: 0;
+}
+@keyframes lw-ring {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.lw-guide-highlight {
+  position: absolute;
+  border: 2px solid var(--lw-color-accent);
+  border-radius: var(--lw-radius-button);
+  /* Dims the rest of the screen, cut out around the area. */
+  box-shadow: 0 0 0 100vmax var(--lw-guide-scrim);
+}
+.lw-guide-highlight.ellipse {
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lw-guide-dots span,
+  .lw-guide-ring {
+    animation: none;
+  }
+  .lw-guide-ring {
+    opacity: 1;
+  }
+}
