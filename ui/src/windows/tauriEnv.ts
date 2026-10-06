@@ -46,6 +46,12 @@ export const tauriEnv: WindowEnv = {
     });
     return () => void unlisten.then((stop) => stop());
   },
+  placePanel: (width, height) => invoke("panel_place", { width, height }),
+  showPanel: (focus) => void invoke("panel_show", { focus }),
+  onPanelToggle(listener) {
+    const unlisten = listen("panel://toggle", () => listener());
+    return () => void unlisten.then((stop) => stop());
+  },
   onTrayAction(listener) {
     const unlisten = listen<{ name: ActionName }>("tray://action", (event) =>
       listener(event.payload.name),

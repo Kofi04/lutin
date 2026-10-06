@@ -15,6 +15,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             supervisor::core_endpoint,
             windows::toggle_panel,
+            windows::panel_place,
+            windows::panel_show,
             windows::overlays_sync,
         ])
         .setup(|app| {

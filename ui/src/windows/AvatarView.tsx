@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { isActivity } from "../avatar/activity";
 import { AvatarCanvas } from "../avatar/AvatarCanvas";
+import { CountdownRing } from "../avatar/CountdownRing";
 import { SETTLE_AFTER_MS } from "../avatar/pose";
 import { visualState } from "../avatar/state";
 import type { CoreClient } from "../core/client";
@@ -26,6 +27,11 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
   const [claude, setClaude] = useState("idle");
   const [hidden, setHidden] = useState(false);
   const [hover, setHover] = useState(false);
+  const [pending, setPending] = useState<{
+    id: string;
+    deadline: number;
+    total: number;
+  } | null>(null);
   const [lastActivity, setLastActivity] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const link = useStatus(client);
@@ -41,6 +47,16 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
       ),
       client.on("quiet", (p) => setHidden(p.on)),
       client.on("avatar.toggle", () => setHidden((h) => !h)),
+      client.on("approval.request", (p) =>
+        setPending({
+          id: p.request_id,
+          deadline: Date.now() + p.timeout_seconds * 1000,
+          total: p.timeout_seconds * 1000,
+        }),
+      ),
+      client.on("approval.cancel", (p) =>
+        setPending((current) => (current?.id === p.request_id ? null : current)),
+      ),
       client.onAny((message) => {
         stats.messages[message.type] = (stats.messages[message.type] ?? 0) + 1;
         if (isActivity(message)) setLastActivity(Date.now());
@@ -101,13 +117,18 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
       }}
       style={{ cursor: "pointer", width: "fit-content" }}
     >
-      <AvatarCanvas
-        state={state}
-        hover={hover}
-        settled={settled}
-        active={!hidden}
-        onPointer={env.onPointer}
-      />
+      <div style={{ position: "relative" }}>
+        <AvatarCanvas
+          state={state}
+          hover={hover}
+          settled={settled}
+          active={!hidden}
+          onPointer={env.onPointer}
+        />
+        {pending && (
+          <CountdownRing deadline={pending.deadline} total={pending.total} size={72} />
+        )}
+      </div>
     </div>
   );
 }

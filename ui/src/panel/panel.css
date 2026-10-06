@@ -1,0 +1,185 @@
+/* The panel (DESIGN.md section 5). Every value is a --lw-* token. */
+
+.lw-panel-window {
+  height: 100%;
+  box-sizing: border-box;
+  /* Room for the shadow: the window is transparent around the surface. */
+  padding: var(--lw-space-4);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* it grows upward, from the avatar */
+  align-items: flex-end;
+  gap: var(--lw-space-2);
+}
+
+.lw-surface {
+  background: var(--lw-color-surface);
+  border: 1px solid var(--lw-color-border);
+  border-radius: var(--lw-radius-panel);
+  box-shadow: var(--lw-shadow-panel);
+  color: var(--lw-color-text);
+  overflow: hidden;
+  user-select: text;
+}
+
+.lw-section {
+  padding: var(--lw-space-3) var(--lw-space-4);
+}
+
+.lw-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
+}
+
+.lw-field {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 var(--lw-space-3);
+  background: var(--lw-color-surface-raised);
+  border: 1px solid var(--lw-color-border);
+  border-radius: var(--lw-radius-field);
+  color: var(--lw-color-text);
+  font: inherit;
+  outline: none;
+}
+.lw-field::placeholder {
+  color: var(--lw-color-text-3);
+}
+.lw-field:focus {
+  border-color: var(--lw-color-accent);
+}
+
+.lw-chip,
+.lw-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lw-space-1);
+  height: 28px;
+  padding: 0 var(--lw-space-3);
+  border-radius: var(--lw-radius-button);
+  border: 1px solid var(--lw-color-border);
+  background: transparent;
+  color: var(--lw-color-text-2);
+  font: inherit;
+  font-size: var(--lw-size-meta);
+  font-weight: var(--lw-weight-medium);
+  cursor: pointer;
+}
+.lw-chip:hover,
+.lw-button:hover,
+.lw-chip:focus-visible,
+.lw-button:focus-visible {
+  border-color: var(--lw-color-border-strong);
+  color: var(--lw-color-text);
+  outline: none;
+}
+.lw-button {
+  height: 32px;
+  font-size: var(--lw-size-body);
+}
+.lw-button.secondary {
+  background: var(--lw-color-surface-raised);
+  color: var(--lw-color-text);
+}
+.lw-button.accent {
+  background: var(--lw-color-accent);
+  border-color: var(--lw-color-accent);
+  color: var(--lw-color-text);
+}
+.lw-button.accent:hover {
+  background: var(--lw-color-accent-hover);
+}
+
+.lw-meta {
+  font-size: var(--lw-size-meta);
+  color: var(--lw-color-text-2);
+}
+.lw-title {
+  font-size: var(--lw-size-title);
+  font-weight: var(--lw-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.lw-mono {
+  font-family: var(--lw-font-code);
+  font-size: var(--lw-size-meta);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--lw-color-surface-raised);
+  border: 1px solid var(--lw-color-border);
+  border-radius: var(--lw-radius-field);
+  padding: var(--lw-space-2) var(--lw-space-3);
+  margin: 0;
+}
+
+.lw-answer {
+  max-height: 300px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+.lw-answer p,
+.lw-answer ul,
+.lw-answer ol {
+  margin: 0 0 var(--lw-space-2);
+}
+.lw-answer h1,
+.lw-answer h2,
+.lw-answer h3 {
+  font-size: var(--lw-size-title);
+  font-weight: var(--lw-weight-semibold);
+  margin: var(--lw-space-3) 0 var(--lw-space-2);
+}
+.lw-answer code {
+  font-family: var(--lw-font-code);
+  font-size: 0.92em;
+  background: var(--lw-color-surface-raised);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.lw-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  vertical-align: text-bottom;
+  background: var(--lw-color-text-3);
+}
+.lw-error {
+  color: var(--lw-color-state-danger);
+}
+.lw-link-url {
+  color: var(--lw-color-text-3);
+}
+
+.lw-list {
+  margin: var(--lw-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.lw-list button {
+  width: 100%;
+  justify-content: flex-start;
+  border-color: transparent;
+}
+.lw-list button[aria-selected="true"] {
+  background: var(--lw-color-surface-raised);
+  color: var(--lw-color-text);
+}
+
+.lw-toast {
+  width: 320px;
+  display: flex;
+  gap: var(--lw-space-3);
+  align-items: flex-start;
+  padding: var(--lw-space-3) var(--lw-space-4);
+  cursor: pointer;
+}
+.lw-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: var(--lw-radius-pill);
+}

@@ -23,6 +23,8 @@ export class Frame {
       togglePanel?: () => void;
       onTrayAction?: (listener: (name: ActionName) => void) => () => void;
       onPointer?: WindowEnv["onPointer"];
+      onPanelToggle?: WindowEnv["onPanelToggle"];
+      onSize?: (width: number, height: number) => void;
       log?: (text: string) => void;
     } = {},
   ) {
@@ -34,6 +36,9 @@ export class Frame {
       togglePanel: () => hooks.togglePanel?.(),
       syncOverlays: async () => {},
       onPointer: hooks.onPointer ?? (() => () => {}),
+      placePanel: async (width, height) => hooks.onSize?.(width, height),
+      showPanel: () => this.setVisible(true),
+      onPanelToggle: hooks.onPanelToggle ?? (() => () => {}),
       onTrayAction: (listener) => hooks.onTrayAction?.(listener) ?? (() => {}),
     };
     const host = hub.host(

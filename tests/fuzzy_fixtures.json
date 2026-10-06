@@ -1,0 +1,210 @@
+{
+  "about": "Writes tests/fuzzy_fixtures.json: what fuzzy.py answers, for ui/src/panel/fuzzy.ts.",
+  "score": [
+    {
+      "query": "",
+      "text": "Notes",
+      "score": 0.0,
+      "positions": []
+    },
+    {
+      "query": "npr",
+      "text": "Note rapide",
+      "score": null,
+      "positions": null
+    },
+    {
+      "query": "nr",
+      "text": "Note rapide",
+      "score": 18.28,
+      "positions": [
+        0,
+        5
+      ]
+    },
+    {
+      "query": "note",
+      "text": "Notes",
+      "score": 82.4,
+      "positions": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "query": "note",
+      "text": "Notes de réunion",
+      "score": 81.08,
+      "positions": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "query": "reunion",
+      "text": "Notes de réunion",
+      "score": 100.68,
+      "positions": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "query": "REU",
+      "text": "Réunion",
+      "score": 66.16,
+      "positions": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "query": "claude",
+      "text": "Demander à Claude…",
+      "score": 83.24,
+      "positions": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "query": "claude",
+      "text": "C L A U D E autre chose",
+      "score": 64.24,
+      "positions": [
+        0,
+        2,
+        4,
+        6,
+        8,
+        10
+      ]
+    },
+    {
+      "query": "zone",
+      "text": "Montrer une zone…",
+      "score": 50.76,
+      "positions": [
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "query": "xyz",
+      "text": "Paramètres",
+      "score": null,
+      "positions": null
+    },
+    {
+      "query": "abc",
+      "text": "ab",
+      "score": null,
+      "positions": null
+    },
+    {
+      "query": "cap ecr",
+      "text": "capture.screen",
+      "score": 53.32,
+      "positions": [
+        0,
+        1,
+        2,
+        6,
+        9,
+        10
+      ]
+    },
+    {
+      "query": "ecran",
+      "text": "Capturer l'écran",
+      "score": 39.48,
+      "positions": [
+        6,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "query": "q",
+      "text": "quit",
+      "score": 34.52,
+      "positions": [
+        0
+      ]
+    },
+    {
+      "query": "ç",
+      "text": "Ça marche",
+      "score": 33.92,
+      "positions": [
+        0
+      ]
+    },
+    {
+      "query": "oe",
+      "text": "Œuvre",
+      "score": null,
+      "positions": null
+    }
+  ],
+  "rank": [
+    {
+      "query": "n",
+      "items": [
+        "Paramètres",
+        "Note rapide",
+        "Notes",
+        "Nouvelle discussion"
+      ],
+      "ranked": [
+        "Notes",
+        "Note rapide",
+        "Nouvelle discussion"
+      ]
+    },
+    {
+      "query": "cl",
+      "items": [
+        "Recharger la configuration",
+        "Demander à Claude…",
+        "Clipboard"
+      ],
+      "ranked": [
+        "Clipboard",
+        "Demander à Claude…",
+        "Recharger la configuration"
+      ]
+    },
+    {
+      "query": "",
+      "items": [
+        "b",
+        "a",
+        "c"
+      ],
+      "ranked": [
+        "b",
+        "a",
+        "c"
+      ]
+    }
+  ]
+}

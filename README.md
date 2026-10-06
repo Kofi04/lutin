@@ -735,6 +735,23 @@ Python, no Tauri: this is where the look is worked on. Only the socket is
 fake: each window keeps its real connection code, reconnection and cloak
 included, and every scenario is checked against the protocol by the tests.
 
+### The panel (phase M5)
+
+One window above the avatar that changes shape (DESIGN.md section 5): the bar
+(chips, `/` to filter the actions with the palette's fuzzy matcher), the
+answer (streamed, then rendered), the approval (with a countdown ring around
+the avatar), the capture to confirm, the selection result, and the toasts.
+Its states are a pure, tested reducer (`ui/src/panel/machine.ts`).
+
+- **Answers are never HTML.** Markdown becomes React elements, so an answer
+  quoting a page with a `<script>` in it shows the script, never runs it: the
+  panel's window can call Tauri. Links are shown with their address and not
+  followed, since following one would navigate the panel itself.
+- **Nothing steals the focus.** The panel takes the keyboard only when you
+  open it to type; an approval or a capture appears without taking it.
+- **An approval cannot be dismissed by a click on the avatar**, since it would
+  then time out unseen: Escape answers it (refuse).
+
 ## Known limits
 
 - Windows only. The modules import cleanly elsewhere (the Win32 calls degrade to

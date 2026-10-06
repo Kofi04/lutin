@@ -5,8 +5,8 @@
 //! them.
 
 use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder,
 };
 
 use crate::protect;
@@ -84,18 +84,29 @@ fn place_avatar(avatar: &WebviewWindow) -> tauri::Result<()> {
     avatar.set_position(PhysicalPosition::new(x, y))
 }
 
-/// Show the panel above the avatar, kept inside the avatar's screen.
-pub fn show_panel(app: &AppHandle) -> tauri::Result<()> {
-    eprintln!("[windows] showing the panel");
+/// Ask the panel to open or close: its own state machine decides what that
+/// means (an approval waiting is not dismissed by a click on the avatar).
+pub fn toggle(app: &AppHandle) {
+    let _ = app.emit_to(PANEL, "panel://toggle", ());
+}
+
+/// Size the panel and put it above the avatar, right edges aligned, kept
+/// inside the avatar's screen. Sizes are logical (CSS) pixels.
+pub fn place_panel(app: &AppHandle, width: f64, height: f64) -> tauri::Result<()> {
     let (Some(avatar), Some(panel)) = (
         app.get_webview_window(AVATAR),
         app.get_webview_window(PANEL),
     ) else {
         return Ok(());
     };
+    let scale = panel.scale_factor()?;
+    let size = PhysicalSize::new(
+        (width * scale).round() as u32,
+        (height * scale).round() as u32,
+    );
+    panel.set_size(size)?;
     let anchor = avatar.outer_position()?;
     let anchor_size = avatar.outer_size()?;
-    let size = panel.outer_size()?;
     let mut x = anchor.x + anchor_size.width as i32 - size.width as i32;
     let mut y = anchor.y - size.height as i32;
     if let Some(monitor) = avatar.current_monitor()? {
@@ -106,9 +117,29 @@ pub fn show_panel(app: &AppHandle) -> tauri::Result<()> {
         x = x.clamp(left, right.max(left));
         y = y.clamp(top, bottom.max(top));
     }
-    panel.set_position(PhysicalPosition::new(x, y))?;
-    panel.show()?;
-    panel.set_focus()
+    panel.set_position(PhysicalPosition::new(x, y))
+}
+
+/// Show the panel. With `focus`, it takes the keyboard (you opened it to
+/// type); without, it appears without taking it from the app you are typing
+/// in (DESIGN.md section 1: no floating surface steals the focus).
+pub fn show_panel(app: &AppHandle, focus: bool) -> tauri::Result<()> {
+    let Some(panel) = app.get_webview_window(PANEL) else {
+        return Ok(());
+    };
+    if focus {
+        panel.show()?;
+        return panel.set_focus();
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
+        let hwnd = panel.hwnd()?;
+        unsafe { ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE) };
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    panel.show()
 }
 
 /// Make the overlays match the monitors: one each, covering it exactly.
@@ -178,15 +209,18 @@ fn encode_query(value: &str) -> String {
 }
 
 #[tauri::command]
-pub fn toggle_panel(app: AppHandle) -> Result<(), String> {
-    let Some(panel) = app.get_webview_window(PANEL) else {
-        return Ok(());
-    };
-    if panel.is_visible().map_err(|e| e.to_string())? {
-        panel.hide().map_err(|e| e.to_string())
-    } else {
-        show_panel(&app).map_err(|e| e.to_string())
-    }
+pub fn toggle_panel(app: AppHandle) {
+    toggle(&app);
+}
+
+#[tauri::command]
+pub fn panel_place(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
+    place_panel(&app, width, height).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn panel_show(app: AppHandle, focus: bool) -> Result<(), String> {
+    show_panel(&app, focus).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

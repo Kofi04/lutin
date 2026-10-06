@@ -17,7 +17,7 @@ import { VISUAL_STATES } from "../avatar/state";
 import type { ActionName } from "../protocol";
 import { AvatarView } from "../windows/AvatarView";
 import { OverlayView } from "../windows/OverlayView";
-import { PanelView } from "../windows/PanelView";
+import { Panel } from "../panel/Panel";
 import { Frame } from "./frame";
 import { Hub, type SentCommand } from "./hub";
 import { play, type Scenario } from "./scenario";
@@ -151,11 +151,20 @@ function Run({
 }) {
   const hub = useMemo(() => new Hub(), []);
   const avatarBox = useRef<HTMLDivElement>(null);
+  const [panelSize, setPanelSize] = useState({ width: 552, height: 140 });
   const frames = useMemo(() => {
-    const panel = new Frame(hub, "panel", false);
+    // The avatar's click reaches the panel as Tauri's "panel://toggle" does.
+    const toggles = new Set<() => void>();
+    const panel = new Frame(hub, "panel", false, {
+      onPanelToggle: (listener) => {
+        toggles.add(listener);
+        return () => toggles.delete(listener);
+      },
+      onSize: (width, height) => setPanelSize({ width, height }),
+    });
     const avatar = new Frame(hub, "avatar", true, {
       onPointer: pointerFrom(avatarBox),
-      togglePanel: () => panel.setVisible(!panel.visible),
+      togglePanel: () => toggles.forEach((toggle) => toggle()),
       onTrayAction: (listener) => {
         trayRef.current = listener;
         return () => (trayRef.current = null);
@@ -193,9 +202,20 @@ function Run({
             <AvatarView client={frames.avatar.client} env={frames.avatar.env} />
           </div>
         </WindowBox>
-        <WindowBox frame={frames.panel} title="Panneau (520 × 420)">
-          <div style={{ width: 520, height: 420 }}>
-            <PanelView client={frames.panel.client} env={frames.panel.env} />
+        <WindowBox
+          frame={frames.panel}
+          title={`Panneau (${panelSize.width} × ${panelSize.height})`}
+        >
+          {/* The window's own size, as Rust would set it: overflow is cut. */}
+          <div
+            style={{
+              width: panelSize.width,
+              height: panelSize.height,
+              overflow: "hidden",
+              outline: "1px dashed var(--lw-color-border)",
+            }}
+          >
+            <Panel client={frames.panel.client} env={frames.panel.env} />
           </div>
         </WindowBox>
       </div>

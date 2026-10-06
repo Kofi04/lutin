@@ -202,6 +202,15 @@ hidden ──clic/hotkey──▶ bar ──Entrée──▶ answer ──Esc─
 - Sortent de l'avatar, empilés au-dessus, 3 max, 4 s, pause au survol, clic = fermer.
 - Une ligne de titre + une ligne optionnelle. Pastille de couleur d'état à gauche.
 
+### Précisions décidées en M5
+- **Les toasts vivent dans la fenêtre du panneau** (au-dessus de son contenu) : pas de nouvelle fenêtre flottante (§8). Panneau fermé, la fenêtre reste affichée le temps des toasts.
+- **Une approbation ou une capture ne se ferme pas d'un clic sur l'avatar** : elle expirerait sans être vue. Esc y répond (Refuser, Annuler).
+- **Le panneau ne prend le focus que si on l'ouvre pour taper** (clic sur l'avatar, raccourci) ; une approbation, une capture, une sélection ou un toast apparaissent sans le prendre (principe 5). Entrée = Autoriser marche donc après un clic dans la carte.
+- **Une réponse continue d'arriver panneau fermé** ; rouvrir le panneau la montre. Une réponse qui démarre sous la barre ouverte s'affiche.
+- **Les liens d'une réponse ne sont pas cliquables** (texte + adresse) : suivre un lien naviguerait la fenêtre elle-même hors de l'app. Les ouvrir dans le navigateur demandera un plugin.
+- **Copier** (blocs de code, sélection) passe par le presse-papiers du core, pas par l'API du navigateur, qui exige un contexte sécurisé.
+- **Chip `Agent`** : la barre prend deux champs, tâche et dossier (saisi). Le sélecteur de dossier viendra avec les fenêtres secondaires (M6 bis).
+
 ---
 
 ## 6. Le curseur guide (façon Clicky)

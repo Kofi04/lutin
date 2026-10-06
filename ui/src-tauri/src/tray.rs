@@ -65,7 +65,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                let _ = windows::show_panel(tray.app_handle());
+                windows::toggle(tray.app_handle());
             }
         });
     if let Some(icon) = app.default_window_icon() {

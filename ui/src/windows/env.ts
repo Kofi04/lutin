@@ -20,6 +20,12 @@ export interface WindowEnv {
    * (only the direction and distance matter). Told only when it moves.
    */
   onPointer(listener: (pointer: { dx: number; dy: number }) => void): () => void;
+  /** The panel's window: its size in CSS px, placed above the avatar. */
+  placePanel(width: number, height: number): Promise<void>;
+  /** Show the panel; `focus` only when it was opened to type. */
+  showPanel(focus: boolean): void;
+  /** The avatar was clicked (or the tray icon): the panel decides. */
+  onPanelToggle(listener: () => void): () => void;
   /** Tray entries that are core actions, for the avatar to send. */
   onTrayAction(listener: (name: ActionName) => void): () => void;
 }

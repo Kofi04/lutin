@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5–M7 à faire — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau ; vérification dans l'app réelle en attente, voir M5) · M6–M7 à faire — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -761,6 +761,40 @@ sans réponse est refusée ; aucune capture ne part sans l'écran `capture`.
 **Risque** : le redimensionnement de fenêtre « taille finale d'abord, puis
 animation » (§5) dépend du comportement de Tauri sous Windows ; à prototyper en
 premier dans la phase.
+
+**Fait (M5)** — Tests : 751 Python, 188 Vitest, 5 Rust. Dépendances ajoutées, imposées par
+DESIGN §2 : `motion` (ressorts), `lucide-react` (icônes).
+
+- `panel/machine.ts` : la machine à états de §5 en réducteur pur, testée transition par
+  transition, interruptions imbriquées comprises (une capture qui arrive pendant une
+  approbation attend son tour, et inversement). Décisions inscrites dans DESIGN §5.
+- `panel/fuzzy.ts` : le moteur flou de la palette porté, vérifié contre les réponses de
+  `fuzzy.py` (`tests/fuzzy_fixtures.json`, régénéré par `tests/make_fuzzy_fixtures.py` ; un
+  test Python échoue s'ils divergent).
+- `panel/markdown.ts` : Markdown → éléments React, **jamais de HTML** (la fenêtre a accès à
+  Tauri, une réponse peut citer une page web). Testé, y compris `<script>` affiché en texte et
+  `my_var_name` non mis en italique.
+- Vues : barre (chips, filtre `/`, mode agent), réponse (streaming puis Markdown, Copier,
+  relance, nouvelle discussion), approbation (anneau de compte à rebours autour de l'avatar,
+  mis à jour une fois par seconde), capture, sélection, toasts.
+- La fenêtre suit son contenu : elle grandit d'abord puis le contenu s'anime, le contenu part
+  d'abord puis elle rétrécit. Rust : `panel_place` (taille, au-dessus de l'avatar, dans
+  l'écran), `panel_show(focus)` (`SW_SHOWNOACTIVATE` sans focus), événement `panel://toggle`.
+
+Vérifié dans le terrain d'essai (navigateur) : réponse rendue avec bloc de code et Copier
+(`selection.copy` envoyé), approbation et anneau puis `approval.answer`, capture puis
+`capture.confirm`, barre ouverte au clic sur l'avatar **avec le focus dans le champ**, `/zo`
+qui propose « Montrer une zone » puis envoie `capture.region`, toast d'expiration affiché à
+10,7 s puis parti après ~4,9 s. Aucune erreur de console.
+
+**Pas encore vérifié dans l'app réelle**, faute de mémoire : la machine a 3,7 Go de RAM et il
+n'en restait que 0,3 Go (Chrome, VS Code, Claude Code ouverts). La compilation de la crate
+`tauri` en version « front embarqué » a planté (`STATUS_STACK_BUFFER_OVERRUN`) et laissé ce
+dossier de build abîmé (`target/embedded`, à supprimer et reconstruire). Le build normal passe.
+À faire quand de la mémoire est libre : `panel_place`/`panel_show(false)` sur la vraie fenêtre
+(position, premier plan inchangé, rendu), et la mesure CPU au repos avec le panneau.
+Aussi à examiner : pendant le test interrompu, le processus Tauri (binaire de M4) avait une
+fenêtre **visible de 16 × 16 px en (0, 0)**, absente des relevés de M2 : origine inconnue.
 
 ### Phase M6 — Le curseur guide (DESIGN §6)
 

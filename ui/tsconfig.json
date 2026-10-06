@@ -3,8 +3,14 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM"],
-    "types": ["node", "vite/client"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node",
+      "vite/client"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "resolveJsonModule": true,
@@ -17,6 +23,7 @@
     "src",
     "vite.config.ts",
     "../src/wizard/protocol_messages.json",
-    "../tests/protocol_fixtures.json"
+    "../tests/protocol_fixtures.json",
+    "../tests/fuzzy_fixtures.json"
   ]
 }
