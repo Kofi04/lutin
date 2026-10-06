@@ -787,14 +787,20 @@ Vérifié dans le terrain d'essai (navigateur) : réponse rendue avec bloc de co
 qui propose « Montrer une zone » puis envoie `capture.region`, toast d'expiration affiché à
 10,7 s puis parti après ~4,9 s. Aucune erreur de console.
 
-**Pas encore vérifié dans l'app réelle**, faute de mémoire : la machine a 3,7 Go de RAM et il
-n'en restait que 0,3 Go (Chrome, VS Code, Claude Code ouverts). La compilation de la crate
-`tauri` en version « front embarqué » a planté (`STATUS_STACK_BUFFER_OVERRUN`) et laissé ce
-dossier de build abîmé (`target/embedded`, à supprimer et reconstruire). Le build normal passe.
-À faire quand de la mémoire est libre : `panel_place`/`panel_show(false)` sur la vraie fenêtre
-(position, premier plan inchangé, rendu), et la mesure CPU au repos avec le panneau.
-Aussi à examiner : pendant le test interrompu, le processus Tauri (binaire de M4) avait une
-fenêtre **visible de 16 × 16 px en (0, 0)**, absente des relevés de M2 : origine inconnue.
+**Vérifié ensuite dans l'app réelle** (version debug, sans voler le focus : par le port de
+débogage de WebView2, un vrai toast du core obtenu par l'action sans danger `config.reload`) :
+le toast s'affiche au bon style, le panneau se place au-dessus de l'avatar (bords droits
+alignés, bas contre l'avatar), **la fenêtre au premier plan ne change pas**. Un vrai bug trouvé
+là : **le panneau restait affiché, vide, après son toast**. tao n'agit que sur un changement de
+son propre drapeau « visible » ; la fenêtre ayant été montrée sans activation directement par
+Win32, tao la croyait cachée et ignorait l'ordre de la cacher. Désormais toutes nos fenêtres
+sont montrées et cachées par une seule voie Win32 (`windows::set_visible`, commande
+`window_visible`), cloak compris ; revérifié : la fenêtre disparaît à l'expiration du toast.
+La fenêtre de 16 × 16 px en (0, 0) est la fenêtre de service interne de tao (« Tao Thread
+Event Target ») : transparente, traversée par les clics, sans contenu, donc invisible.
+
+Le dossier `target/embedded` abîmé a été supprimé ; la compilation de la crate `tauri` y avait
+planté par manque de mémoire (3,7 Go de RAM, 0,3 Go libres à ce moment-là).
 
 ### Phase M6 — Le curseur guide (DESIGN §6)
 

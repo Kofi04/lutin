@@ -15,10 +15,10 @@ export const tauriHost: Host = {
   async hideWindow() {
     const window = getCurrentWindow();
     const visible = await window.isVisible();
-    if (visible) await window.hide();
+    if (visible) await invoke("window_visible", { visible: false, focus: false });
     return visible;
   },
   async showWindow() {
-    await getCurrentWindow().show();
+    await invoke("window_visible", { visible: true, focus: false });
   },
 };

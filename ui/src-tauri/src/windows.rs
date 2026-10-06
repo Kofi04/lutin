@@ -56,7 +56,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     avatar.set_size(LogicalSize::new(AVATAR_SIZE, AVATAR_SIZE))?;
     place_avatar(&avatar)?;
     protect::apply(&avatar);
-    avatar.show()?;
+    set_visible(&avatar, true, false)?;
 
     let panel = floating(app, PANEL, "panel.html")
         .inner_size(PANEL_WIDTH, PANEL_HEIGHT)
@@ -124,22 +124,49 @@ pub fn place_panel(app: &AppHandle, width: f64, height: f64) -> tauri::Result<()
 /// type); without, it appears without taking it from the app you are typing
 /// in (DESIGN.md section 1: no floating surface steals the focus).
 pub fn show_panel(app: &AppHandle, focus: bool) -> tauri::Result<()> {
-    let Some(panel) = app.get_webview_window(PANEL) else {
-        return Ok(());
-    };
-    if focus {
-        panel.show()?;
-        return panel.set_focus();
+    match app.get_webview_window(PANEL) {
+        Some(panel) => set_visible(&panel, true, focus),
+        None => Ok(()),
     }
+}
+
+/// Show or hide one of our windows: the one way to do it, for all of them.
+///
+/// Straight through Win32, never through tao's show/hide: tao keeps its own
+/// "visible" flag and only acts on a change of that flag, so a window shown
+/// without activation (which tao cannot do) stayed on screen when asked to
+/// hide, because tao believed it hidden already (found by checking the real
+/// app: an empty panel left above the avatar after its toast).
+pub fn set_visible(window: &WebviewWindow, visible: bool, focus: bool) -> tauri::Result<()> {
     #[cfg(windows)]
     {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
-        let hwnd = panel.hwnd()?;
-        unsafe { ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE) };
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            ShowWindow, SW_HIDE, SW_SHOW, SW_SHOWNOACTIVATE,
+        };
+        let hwnd = window.hwnd()?.0 as _;
+        let command = match (visible, focus) {
+            (false, _) => SW_HIDE,
+            (true, true) => SW_SHOW,
+            (true, false) => SW_SHOWNOACTIVATE,
+        };
+        unsafe { ShowWindow(hwnd, command) };
+        if visible && focus {
+            window.set_focus()?;
+        }
         Ok(())
     }
     #[cfg(not(windows))]
-    panel.show()
+    {
+        if visible {
+            window.show()?;
+        } else {
+            window.hide()?;
+        }
+        if visible && focus {
+            window.set_focus()?;
+        }
+        Ok(())
+    }
 }
 
 /// Make the overlays match the monitors: one each, covering it exactly.
@@ -221,6 +248,12 @@ pub fn panel_place(app: AppHandle, width: f64, height: f64) -> Result<(), String
 #[tauri::command]
 pub fn panel_show(app: AppHandle, focus: bool) -> Result<(), String> {
     show_panel(&app, focus).map_err(|e| e.to_string())
+}
+
+/// For the pages: show or hide the window that asks (WindowEnv, the cloak).
+#[tauri::command]
+pub fn window_visible(window: WebviewWindow, visible: bool, focus: bool) -> Result<(), String> {
+    set_visible(&window, visible, focus).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

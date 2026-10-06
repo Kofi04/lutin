@@ -88,11 +88,7 @@ fn on_menu(app: &AppHandle, id: &str) {
         "toggle" => {
             if let Some(avatar) = app.get_webview_window(windows::AVATAR) {
                 let visible = avatar.is_visible().unwrap_or(true);
-                let _ = if visible {
-                    avatar.hide()
-                } else {
-                    avatar.show()
-                };
+                let _ = windows::set_visible(&avatar, !visible, false);
             }
         }
         "restart" => supervisor::restart(app),

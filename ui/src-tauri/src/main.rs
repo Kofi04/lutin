@@ -17,6 +17,7 @@ fn main() {
             windows::toggle_panel,
             windows::panel_place,
             windows::panel_show,
+            windows::window_visible,
             windows::overlays_sync,
         ])
         .setup(|app| {

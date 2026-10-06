@@ -32,8 +32,10 @@ function watchCentre(): void {
 }
 
 export const tauriEnv: WindowEnv = {
-  show: () => void getCurrentWindow().show(),
-  hide: () => void getCurrentWindow().hide(),
+  // Through window_visible, never the window API's show/hide: see
+  // set_visible in windows.rs for why.
+  show: () => void invoke("window_visible", { visible: true, focus: false }),
+  hide: () => void invoke("window_visible", { visible: false, focus: false }),
   startDragging: () => void getCurrentWindow().startDragging(),
   togglePanel: () => void invoke("toggle_panel"),
   syncOverlays: () => invoke("overlays_sync"),
