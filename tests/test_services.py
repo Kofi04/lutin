@@ -61,6 +61,9 @@ class FakeApp:
     def _setup_checks(self) -> list[Check]:
         return [Check("Claude Code", False, "Lancez <code>claude auth login</code>.")]
 
+    def _set_reminder(self, seconds: int, label: str) -> None:
+        self.calls.append(("reminder", seconds, label))
+
     def _set_autostart(self, enabled: bool) -> None:
         self.calls.append(("autostart", enabled))
 
@@ -352,3 +355,14 @@ def test_history_export_writes_the_markdown(rpc, app, tmp_path):
     assert refused(rpc, "history.export", {"id": talk, "path": str(missing)}).code == (
         "write_failed"
     )
+
+
+def test_a_reminder_in_plain_words(rpc, app):
+    found = rpc.call("timers.parse", {"text": "rappel dans 20 min sortir le pain"})[
+        "reminder"
+    ]
+    assert found["seconds"] == 1200
+    assert "pain" in found["label"]
+    assert rpc.call("timers.parse", {"text": "bonjour"}) == {"reminder": None}
+    rpc.call("timers.set", {"seconds": 1200, "label": found["label"]})
+    assert app.calls[-1] == ("reminder", 1200, found["label"])

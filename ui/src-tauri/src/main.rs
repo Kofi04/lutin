@@ -22,6 +22,8 @@ fn main() {
             windows::window_visible,
             windows::app_window,
             windows::avatar_anchor,
+            windows::avatar_appearance,
+            protect::capture_exclusion,
             cursor::cursor_listen,
             cursor::cursor_now,
             windows::overlays_sync,

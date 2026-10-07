@@ -6,9 +6,7 @@ import pytest
 from PySide6.QtCore import QObject, Signal
 
 from wizard.assistant.agents import MAX_RUNNING, AgentError, AgentManager
-from wizard.sessions import SessionRegistry
-from wizard.ui_claude import ToolRequest
-from wizard.ui_sessions import POSES, SessionDock, pose_for
+from wizard.claude.tool_request import ToolRequest
 
 
 class FakeSession(QObject):
@@ -169,51 +167,6 @@ def test_shutdown_closes_running_agents_synchronously(manager, tmp_path):
 # -- the mini-wizards -------------------------------------------------------
 
 
-def test_every_session_state_has_a_pose():
-    from wizard.sessions import EVENT_STATES
-
-    for state, _feeds in EVENT_STATES.values():
-        assert state in POSES
-
-
-def test_an_unknown_state_rests():
-    assert pose_for("something new").value == "idle"
-
-
-def test_the_dock_shows_one_slot_per_session_and_hides_when_empty():
-    from PySide6.QtWidgets import QWidget
-
-    anchor = QWidget()
-    anchor.setGeometry(800, 600, 96, 96)
-    dock = SessionDock(anchor)
-    registry = SessionRegistry()
-    registry.record("a", "projet-a", "working", "Edit x.py")
-    registry.record("b", "projet-b", "waiting", "Bash")
-
-    dock.update_sessions(registry.sessions)
-    two_wide = dock.width()
-    assert dock.isVisible()
-
-    registry.record("c", "projet-c", "done")
-    dock.update_sessions(registry.sessions)
-    assert dock.width() > two_wide
-
-    dock.update_sessions([])
-    assert not dock.isVisible()
-
-
-def test_the_dock_stays_hidden_while_suppressed():
-    from PySide6.QtWidgets import QWidget
-
-    dock = SessionDock(QWidget())
-    registry = SessionRegistry()
-    registry.record("a", "p", "working")
-    dock.set_suppressed(True)
-    dock.update_sessions(registry.sessions)
-
-    assert not dock.isVisible()
-
-
 # -- approvals reach their own owner ---------------------------------------
 
 
@@ -232,8 +185,9 @@ def test_same_request_id_from_two_owners_reaches_each_one(tmp_path, monkeypatch)
     config.parent.mkdir(parents=True)
     config.write_text("[claude]\nprewarm = false\n", encoding="utf-8")
     from wizard.app import AvatarApp
+    from wizard.presenter_remote import ProtocolPresenter
 
-    app = AvatarApp([])
+    app = AvatarApp([], ProtocolPresenter("test-token"))
     try:
         main_answers, bridge_answers = [], []
         app.claude.answer_permission = lambda rid, d: main_answers.append((rid, d))

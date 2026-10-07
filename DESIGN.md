@@ -54,7 +54,7 @@ Ce document est la source de vérité pour l'interface. Toute décision visuelle
 - **Guide :** `guide.active { active }` pour qu'Échap ne soit réservé que pendant l'affichage.
 - **Divers :** `quiet { on }` (plein écran), `system` (charge machine pour l'infobulle), `avatar.toggle`, `session.dismiss`, `action { name }` pour les entrées de menu sans données.
 - **Fenêtres pas encore portées :** `window.open { name }` (paramètres, historique, palette, accueil, hooks… — phase M6 bis). Les hooks ne sont jamais écrits tant que la fenêtre de diff n'existe pas côté Tauri.
-- **Prévu, pas encore défini :** le ciblage d'une fenêtre par Ctrl + glisser l'avatar (phase M4), les requêtes de données `history.*`, `settings.get|set`, `palette.query`, `hooks.plan|apply` (phase M6 bis).
+- **Ajouté en M6 bis et M7 :** `request`/`reply` (les services de la fenêtre app, par nom de méthode), `capture.window { x, y }` (Ctrl + glisser relâché là, en pixels physiques), `appearance` (taille, opacité, clics traversants, exclusion des partages ; à la connexion et à chaque rechargement).
 
 **Mode développement :** `npm run dev` ouvre un **playground navigateur** qui rejoue des événements factices (réponse en streaming, approbation, curseur qui pointe…). On règle le look là, sans lancer l'app.
 
@@ -318,4 +318,23 @@ voler le focus) ne s'y applique pas — on l'ouvre pour s'en servir, elle prend 
   clair n'est pas fait.
 - Sélecteurs natifs (dossier de l'agent, « Exporter… ») par `tauri-plugin-dialog`, permis à
   cette seule fenêtre (`capabilities/app.json`).
+
+---
+
+## 10. Précisions décidées en M7 (fin du Qt visible)
+
+- **Les sessions Claude Code** (vos sessions vues par les hooks, les agents du sorcier) : une
+  ligne chacune au-dessus de la barre du panneau — pastille de couleur, nom, état, dernière
+  action ; « Arrêter » pour un agent en cours, × pour retirer une session finie. Plus de
+  mini-sorciers autour de l'avatar : sa fenêtre de 72 px ne les contiendrait pas, et une
+  fenêtre de plus irait contre §8.
+- **Ctrl + glisser** : le pointeur reste à l'avatar jusqu'au relâchement (capture du pointeur),
+  le curseur devient une croix, et la fenêtre sous le point de relâchement est capturée, puis
+  montrée dans le panneau avant tout envoi. Pas de halo autour de la fenêtre visée pendant le
+  geste : l'aperçu de confirmation montre ce qui a été pris.
+- **Fichier déposé** : la première image déposée sur l'avatar devient une capture, montrée
+  avant envoi. L'animation « il l'avale » (§4) n'est pas faite.
+- **L'apparence** (`[appearance]`) : la taille agrandit la fenêtre depuis son coin bas-droit
+  (il reste posé sur la barre) ; « clics traversants » rend l'avatar transparent à la souris
+  en permanence, comme le faisait le Qt — on passe alors par l'icône et les raccourcis.
 

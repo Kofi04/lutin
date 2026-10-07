@@ -6,14 +6,7 @@ import pytest
 from PySide6.QtCore import QSettings
 
 from wizard.config import Hotkeys
-from wizard.ui_onboarding import (
-    Check,
-    OnboardingDialog,
-    already_shown,
-    mark_shown,
-    pretty,
-    shortcut_rows,
-)
+from wizard.onboarding import already_shown, mark_shown, pretty, shortcut_rows
 
 
 @pytest.fixture
@@ -56,35 +49,3 @@ def test_a_disabled_shortcut_is_not_advertised():
     rows = dict(shortcut_rows(Hotkeys(quick_note="")))
 
     assert "Note rapide" not in rows
-
-
-def test_a_failing_check_offers_its_fix():
-    from PySide6.QtWidgets import QPushButton
-
-    dialog = OnboardingDialog(
-        Hotkeys(),
-        [Check("Hooks", False, "Pas installés.", action="Installer…")],
-    )
-    fired = []
-    dialog.install_hooks_requested.connect(lambda: fired.append(True))
-    install = next(
-        b for b in dialog.findChildren(QPushButton) if b.text() == "Installer…"
-    )
-
-    install.click()
-
-    assert fired == [True]
-    dialog.deleteLater()
-
-
-def test_a_check_that_passes_offers_no_button():
-    from PySide6.QtWidgets import QPushButton
-
-    dialog = OnboardingDialog(
-        Hotkeys(), [Check("Hooks", True, "Installés.", action="Installer…")]
-    )
-    labels = [button.text() for button in dialog.findChildren(QPushButton)]
-
-    # Offering to install what is already installed would be noise.
-    assert "Installer…" not in labels
-    dialog.deleteLater()

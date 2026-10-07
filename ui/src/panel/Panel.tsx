@@ -21,7 +21,7 @@ import {
 
 import type { CoreClient } from "../core/client";
 import { springs } from "../design/motion";
-import type { ActionName } from "../protocol";
+import type { ActionName, CorePayloads } from "../protocol";
 import type { WindowEnv } from "../windows/env";
 import { initial, reduce, TOAST_MS, windowVisible } from "./machine";
 import "./panel.css";
@@ -31,6 +31,7 @@ import {
   Bar,
   CaptureView,
   SelectionView,
+  SessionsCard,
   ToastView,
   StepsCard,
   type SlashItem,
@@ -106,6 +107,10 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
   // The launcher entries of config.toml, asked for each time the bar opens:
   // a config reload may have changed them.
   const [launchers, setLaunchers] = useState<{ index: number; label: string }[]>([]);
+  const [sessions, setSessions] = useState<CorePayloads["sessions.update"]["sessions"]>(
+    [],
+  );
+  useEffect(() => client.on("sessions.update", (p) => setSessions(p.sessions)), [client]);
   const barOpen = state.view === "bar";
   useEffect(() => {
     if (!barOpen) return;
@@ -114,8 +119,56 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
       .then((r) => setLaunchers(r.items))
       .catch(() => setLaunchers([]));
   }, [client, barOpen]);
+
+  // "/rappel dans 20 min sortir le pain": the core reads it (nl_reminder.py).
+  const [reminder, setReminder] = useState<{
+    seconds: number;
+    label: string;
+    describe: string;
+  } | null>(null);
+  const queryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onQuery = useCallback(
+    (query: string) => {
+      if (queryTimer.current) clearTimeout(queryTimer.current);
+      queryTimer.current = setTimeout(() => {
+        client
+          .request<{ reminder: typeof reminder }>("timers.parse", { text: query })
+          .then((r) => setReminder(r.reminder))
+          .catch(() => setReminder(null));
+      }, 150);
+    },
+    [client],
+  );
   const slashExtra = useMemo<SlashItem[]>(
     () => [
+      ...(reminder
+        ? [
+            {
+              key: "reminder",
+              label: reminder.describe,
+              always: true,
+              run: () => {
+                void client
+                  .request("timers.set", {
+                    seconds: reminder.seconds,
+                    label: reminder.label,
+                  })
+                  .catch(() => {});
+                dispatch({ type: "escape" });
+              },
+            },
+          ]
+        : []),
+      ...sessions
+        .filter((s) => s.agent_id !== undefined && s.running)
+        .map((s) => ({
+          key: `agent:${s.agent_id}`,
+          label: `Arrêter l'agent : ${s.label}`,
+          run: () => {
+            client.send("agent.stop", { agent_id: s.agent_id! });
+            dispatch({ type: "escape" });
+          },
+        })),
       ...VIEW_ITEMS.map(([view, label]) => ({
         key: `view:${view}`,
         label,
@@ -133,7 +186,7 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
         },
       })),
     ],
-    [client, env, launchers],
+    [client, env, launchers, sessions, reminder],
   );
 
   // -- answers to send ------------------------------------------------------
@@ -284,11 +337,23 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
                 // Born from the avatar, below and to the right.
                 style={{ transformOrigin: "bottom right" }}
               >
+                {view === "bar" && sessions.length > 0 && (
+                  <div style={{ marginBottom: "var(--lw-space-2)" }}>
+                    <SessionsCard
+                      sessions={sessions}
+                      onStop={(agentId) => send("agent.stop", { agent_id: agentId })}
+                      onDismiss={(sessionId) =>
+                        send("session.dismiss", { session_id: sessionId })
+                      }
+                    />
+                  </div>
+                )}
                 {view === "bar" && (
                   <Bar
                     key={state.palette}
                     initialText={state.prefill}
                     extra={slashExtra}
+                    onQuery={onQuery}
                     attachment={state.attachment}
                     focus={state.focus}
                     onAsk={ask}

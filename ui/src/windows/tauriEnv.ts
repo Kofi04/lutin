@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { ActionName } from "../protocol";
@@ -39,6 +40,15 @@ export const tauriEnv: WindowEnv = {
   startDragging: () => void getCurrentWindow().startDragging(),
   togglePanel: () => void invoke("toggle_panel"),
   openApp: (view) => void invoke("app_window", { view }),
+  applyAppearance: (scale, clickThrough) =>
+    void invoke("avatar_appearance", { scale, clickThrough }),
+  setCaptureExclusion: (exclude) => void invoke("capture_exclusion", { exclude }),
+  onFileDrop(listener) {
+    const unlisten = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "drop") listener(event.payload.paths);
+    });
+    return () => void unlisten.then((stop) => stop());
+  },
   syncOverlays: () => invoke("overlays_sync"),
   onPointer(listener) {
     watchCentre();

@@ -1,23 +1,21 @@
 """Everything the app shows, behind one interface.
 
 The app decides *what* to show (a mood, an approval, a capture to confirm);
-a presenter decides *how*. Two exist:
-
-* `QtPresenter` (presenter_qt.py): today's Qt widgets, the default;
-* `ProtocolPresenter` (presenter_remote.py): events over a local WebSocket to
-  the Tauri UI, for `--headless`.
+a presenter decides *how*. There is one: `ProtocolPresenter`
+(presenter_remote.py), events over a local WebSocket to the Tauri UI. The
+Qt widgets that were the other one went in phase M7; the interface stays,
+so the app's tests can stand in a presenter of their own.
 
 The app never touches a widget directly. When a presenter needs an answer
 (an approval, a confirmed capture, a chosen action), it calls the app back:
 `_on_approval_decided`, `_on_capture_confirmed`, `_on_selection_action`...
-Nothing here blocks waiting for the user, except the few Qt dialogs that
-already did and that the Tauri UI will replace (see PLAN.md, phase M6 bis).
+Nothing here blocks waiting for the user.
 """
 
 from __future__ import annotations
 
-#: Windows that exist only in Qt for now. Asked for in headless mode, they
-#: become a `window.open` event for the UI to deal with.
+#: The windows the app may ask for: a `window.open` event, which the Tauri UI
+#: turns into a view of its app window (or the panel's palette).
 WINDOWS = (
     "quick_note",
     "clipboard",

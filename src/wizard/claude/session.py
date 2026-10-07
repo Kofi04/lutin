@@ -31,7 +31,7 @@ from ..overlay.tools import QUALIFIED as OVERLAY_TOOLS
 from ..overlay.tools import SERVER as OVERLAY_SERVER
 from ..overlay.tools import OverlayBridge
 from ..overlay.tools import build_server as build_overlay_server
-from ..ui_claude import ToolRequest
+from .tool_request import ToolRequest
 
 #: Tools Claude may use without ever asking. Read-only, no side effects.
 READ_ONLY_TOOLS = ["Read", "Glob", "Grep", "WebFetch", "WebSearch"]

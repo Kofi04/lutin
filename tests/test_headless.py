@@ -16,6 +16,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 
 from wizard.capture.prepare import CaptureKind, prepare
+from wizard.claude.tool_request import ToolRequest
 from wizard.mood import Mood
 from wizard.presenter_remote import (
     READY_PREFIX,
@@ -23,7 +24,6 @@ from wizard.presenter_remote import (
     ProtocolPresenter,
     take_token,
 )
-from wizard.ui_claude import ToolRequest
 
 from .ws_client import TestClient, spin_until
 
@@ -456,3 +456,28 @@ def test_the_app_window_services_run_on_the_real_app(core):
 
     refused = ask("settings.write", {"values": {"appearance.scale": 99}}, id="g")
     assert refused["ok"] is False and refused["error"] == "invalid"
+
+
+def test_the_look_of_the_avatar_is_sent_on_connect_and_on_reload(core):
+    client = core.test_connect("avatar")
+    assert client.wait_for("appearance").payload == {
+        "scale": core.config.appearance.scale,
+        "opacity": core.config.appearance.opacity,
+        "click_through": core.config.appearance.click_through_when_idle,
+        "exclude_from_capture": core.config.ui.exclude_from_capture,
+    }
+    core.config.appearance.opacity = 0.5
+    core.ui.apply_config(core.config)
+    assert client.wait_for("appearance", count=2).payload["opacity"] == 0.5
+
+
+def test_ctrl_drag_released_over_nothing_says_so(core, monkeypatch):
+    from wizard import winapi
+
+    monkeypatch.setattr(winapi, "window_at", lambda x, y, ignore=None: None)
+    failures = []
+    core.capture.failed.connect(failures.append)
+    client = core.test_connect("avatar")
+    client.send("capture.window", {"x": 10, "y": 20})
+    spin_until(lambda: failures)
+    assert failures == ["Aucune fenêtre à cet endroit."]

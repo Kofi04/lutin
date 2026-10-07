@@ -1,8 +1,7 @@
-"""Turns the three capture gestures into one confirmed `Capture`.
+"""Turns a capture request into one `Capture`, ready for the preview.
 
-Everything that knows about screens, windows and halos lives here, so the
-avatar window only has to say "the user started pointing" and the app only has
-to listen for `captured`.
+A region (drawn by the Tauri overlay, received as a rectangle), the screen
+under the cursor, or a dropped file. The app only listens for `captured`.
 """
 
 from __future__ import annotations
@@ -12,15 +11,11 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRect, Signal
 from PySide6.QtGui import QImage
 
+from .. import winapi
 from .cloak import Cloak
+from .grab import grab_rect
 from .prepare import CaptureKind, prepare
-from .region import RegionSelector, grab_rect
-from .window import (
-    WindowHighlight,
-    capture_window,
-    physical_to_logical,
-    window_under_cursor,
-)
+from .window import capture_window, physical_to_logical
 
 #: Image formats we can show Claude directly. Anything else is reported rather
 #: than silently dropped.
@@ -28,7 +23,7 @@ _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 
 
 class CaptureController(QObject):
-    """Owns the selection overlay, the window halo and the preview flow."""
+    """Grabs what was asked for, with our windows out of the way."""
 
     #: A capture the user has confirmed.
     captured = Signal(object)  # Capture
@@ -44,55 +39,8 @@ class CaptureController(QObject):
         # for the screen to repaint, then the grab. A RemoteCloak when the
         # windows belong to the Tauri UI.
         self._cloak = cloak if cloak is not None else Cloak()
-        # The selector's veils and the halo are windows: created on first
-        # use, so a core whose UI draws them itself never makes any.
-        self._selector_widget: RegionSelector | None = None
-        self._halo_widget: WindowHighlight | None = None
-        self._ignored_hwnds: set[int] = set()
-        self._target = None
-        self._for_text = False
-
-    @property
-    def _selector(self) -> RegionSelector:
-        if self._selector_widget is None:
-            self._selector_widget = RegionSelector(self)
-            self._selector_widget.selected.connect(self._on_region_selected)
-        return self._selector_widget
-
-    @property
-    def _halo(self) -> WindowHighlight:
-        if self._halo_widget is None:
-            self._halo_widget = WindowHighlight()
-        return self._halo_widget
-
-    # -- registration -----------------------------------------------------
-
-    def ignore_window(self, widget) -> None:
-        """Never target one of our own windows (the avatar is always-on-top)."""
-        handle = int(widget.winId())
-        if handle:
-            self._ignored_hwnds.add(handle)
-
-    def hide_during_capture(self, widget) -> None:
-        """Keep one of our windows out of the screenshots we take."""
-        self._cloak.add(widget)
 
     # -- region -----------------------------------------------------------
-
-    def start_region(self) -> None:
-        if not self._selector.active:
-            self._for_text = False
-            self._selector.start()
-
-    def start_text_region(self) -> None:
-        """Select a region to read its text locally, not to show Claude."""
-        if not self._selector.active:
-            self._for_text = True
-            self._selector.start()
-
-    def _on_region_selected(self, rect: QRect) -> None:
-        for_text, self._for_text = self._for_text, False
-        self.grab_region(rect, for_text)
 
     def grab_region(self, rect: QRect, for_text: bool = False) -> None:
         """Grab a rectangle (logical desktop coordinates) chosen elsewhere."""
@@ -160,36 +108,14 @@ class CaptureController(QObject):
             _region_of(rect),
         )
 
-    # -- window -----------------------------------------------------------
+    # -- a window -----------------------------------------------------------
 
-    def start_targeting(self) -> None:
-        self._ignored_hwnds.add(int(self._halo.winId()))
-        self.update_target()
-
-    def update_target(self) -> None:
-        """Follow the cursor and frame whatever window is under it."""
-        info = window_under_cursor(self._ignored_hwnds)
-        self._target = info
+    def capture_window_at(self, x: int, y: int) -> None:
+        """Ctrl + drag released at this physical point: the window under it."""
+        info = winapi.window_at(x, y)
         if info is None:
-            self._halo.hide_halo()
+            self.failed.emit("Aucune fenêtre à cet endroit.")
             return
-        self._halo.show_around(
-            physical_to_logical(info.left, info.top, info.right, info.bottom)
-        )
-
-    def cancel_targeting(self) -> None:
-        if self._halo_widget is not None:
-            self._halo_widget.hide_halo()
-        self._target = None
-
-    def finish_targeting(self) -> None:
-        info, self._target = self._target, None
-        self._halo.hide_halo()
-
-        if info is None:
-            self.failed.emit("Aucune fenêtre sous le curseur.")
-            return
-
         rect = physical_to_logical(info.left, info.top, info.right, info.bottom)
         self._around(lambda: self._grab_window(info, rect))
 

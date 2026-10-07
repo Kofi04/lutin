@@ -39,6 +39,12 @@ export interface WindowEnv {
   /** A message to our other windows (the panel's step buttons). */
   broadcast(name: string, payload: unknown): void;
   onBroadcast(name: string, listener: (payload: unknown) => void): () => void;
+  /** The avatar's size (1 = 72 px) and whether clicks go through him. */
+  applyAppearance(scale: number, clickThrough: boolean): void;
+  /** Hide every window from screen shares, or stop hiding them. */
+  setCaptureExclusion(exclude: boolean): void;
+  /** Files dropped on this window, by path. */
+  onFileDrop(listener: (paths: string[]) => void): () => void;
   /** Open (or bring back) the app window on a view, "notes/new" say. */
   openApp(view: string): void;
   /** Tray entries that are core actions, for the avatar to send. */

@@ -1,76 +1,21 @@
-"""Capturing a shortcut from a key press, and catching two that collide."""
+"""Catching two shortcuts that collide, and specs that do not parse."""
 
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
 
-from wizard.hotkey_spec import (
-    find_conflicts,
-    invalid_bindings,
-    normalise,
-    spec_from_qt,
-)
+from wizard.hotkey_spec import find_conflicts, invalid_bindings, normalise
 
-CTRL = Qt.KeyboardModifier.ControlModifier
-ALT = Qt.KeyboardModifier.AltModifier
-SHIFT = Qt.KeyboardModifier.ShiftModifier
-WIN = Qt.KeyboardModifier.MetaModifier
-NONE = Qt.KeyboardModifier.NoModifier
-
-
-# -- capturing -------------------------------------------------------------
+# -- what the app window captures ---------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("modifiers", "key", "expected"),
-    [
-        (CTRL | ALT, Qt.Key.Key_N, "ctrl+alt+N"),
-        (CTRL | SHIFT, Qt.Key.Key_S, "ctrl+shift+S"),
-        (ALT, Qt.Key.Key_Space, "alt+space"),
-        (WIN, Qt.Key.Key_F5, "win+f5"),
-        (CTRL | ALT, Qt.Key.Key_7, "ctrl+alt+7"),
-        (CTRL, Qt.Key.Key_F12, "ctrl+f12"),
-    ],
+    "spec",
+    # The shapes ui/src/app/hotkey.ts produces (its own tests list them).
+    ["ctrl+alt+N", "win+N", "ctrl+5", "alt+shift+f12", "ctrl+space", "ctrl+enter"],
 )
-def test_a_key_press_becomes_a_spec(modifiers, key, expected):
-    assert spec_from_qt(modifiers, key) == expected
-
-
-def test_a_captured_spec_parses_back():
-    # What the settings window captures must be something the hotkey layer
-    # can actually register.
-    spec = spec_from_qt(CTRL | ALT, Qt.Key.Key_K)
-
+def test_a_spec_captured_in_the_app_window_parses(spec):
     assert normalise(spec) is not None
-
-
-def test_modifiers_alone_are_not_a_shortcut_yet():
-    # The user is still holding Ctrl and reaching for the letter.
-    assert spec_from_qt(CTRL, Qt.Key.Key_Control) is None
-    assert spec_from_qt(CTRL | ALT, Qt.Key.Key_Alt) is None
-    assert spec_from_qt(SHIFT, Qt.Key.Key_Shift) is None
-
-
-def test_a_bare_key_is_refused():
-    # A global hotkey with no modifier would eat that key in every app.
-    assert spec_from_qt(NONE, Qt.Key.Key_A) is None
-
-
-def test_shift_alone_is_refused():
-    # shift+A would swallow every capital A typed anywhere on the machine.
-    assert spec_from_qt(SHIFT, Qt.Key.Key_A) is None
-
-
-def test_an_unsupported_key_is_refused():
-    # Arrow keys are not in the hotkey vocabulary; better to refuse than to
-    # capture something that can never be registered.
-    assert spec_from_qt(CTRL, Qt.Key.Key_Left) is None
-
-
-def test_modifier_order_is_canonical():
-    # However the user presses them, the text comes out the same way round.
-    assert spec_from_qt(ALT | CTRL, Qt.Key.Key_N) == "ctrl+alt+N"
 
 
 # -- conflicts -------------------------------------------------------------

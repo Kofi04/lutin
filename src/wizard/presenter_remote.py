@@ -110,6 +110,7 @@ class ProtocolPresenter(Presenter):
         self._connection = ("connecting", "")
         self._sessions: list[dict] = []
         self._quiet = False
+        self._appearance: dict | None = None
         self._onboarding_pending = False
         self._approval: dict | None = None
         self._approval_timer = QTimer()
@@ -131,6 +132,9 @@ class ProtocolPresenter(Presenter):
             "capture.start": self._on_capture_start,
             "capture.region": self._on_capture_region,
             "capture.file": lambda client, p: self.app._on_files_dropped([p["path"]]),
+            "capture.window": lambda client, p: self.app.capture.capture_window_at(
+                round(p["x"]), round(p["y"])
+            ),
             "capture.confirm": self._on_capture_confirm,
             "capture.cancel": self._on_capture_cancel,
             "selection.pick": self._on_selection_pick,
@@ -161,6 +165,7 @@ class ProtocolPresenter(Presenter):
 
     def bind(self, app) -> None:
         super().bind(app)
+        self.apply_config(app.config)
         # The session's real state, not a guess: without prewarm it stays
         # "offline" until the first question and announces nothing before.
         self._connection = (app.claude.state, "")
@@ -233,6 +238,8 @@ class ProtocolPresenter(Presenter):
         state, detail = self._connection
         send(client, "connection", {"state": state, "detail": detail})
         send(client, "sessions.update", {"sessions": self._sessions})
+        if self._appearance is not None:
+            send(client, "appearance", self._appearance)
         if self._quiet:
             send(client, "quiet", {"on": True})
         if self._onboarding_pending and not onboarding.already_shown():
@@ -295,6 +302,15 @@ class ProtocolPresenter(Presenter):
             payload["battery"] = int(sample.battery_percent)
             payload["charging"] = bool(sample.on_ac)
         self._emit("system", payload)
+
+    def apply_config(self, config) -> None:
+        self._appearance = {
+            "scale": config.appearance.scale,
+            "opacity": config.appearance.opacity,
+            "click_through": config.appearance.click_through_when_idle,
+            "exclude_from_capture": config.ui.exclude_from_capture,
+        }
+        self._emit("appearance", self._appearance)
 
     def set_quiet(self, quiet: bool) -> None:
         self._quiet = quiet

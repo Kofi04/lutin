@@ -50,6 +50,11 @@
       }
     },
     "capture.file": { "from": "ui", "doc": "A file dropped on the avatar.", "payload": { "path": "string" } },
+    "capture.window": {
+      "from": "ui",
+      "doc": "Ctrl + drag of the avatar released here: capture the window under this point (physical desktop pixels).",
+      "payload": { "x": "number", "y": "number" }
+    },
     "capture.confirm": { "from": "ui", "payload": { "capture_id": "string" } },
     "capture.cancel": { "from": "ui", "payload": { "capture_id": "string?" } },
     "selection.pick": {
@@ -121,6 +126,16 @@
       "from": "core",
       "doc": "Machine load, for the tray tooltip.",
       "payload": { "cpu": "number", "memory": "number", "battery": "integer?", "charging": "boolean?" }
+    },
+    "appearance": {
+      "from": "core",
+      "doc": "The avatar's look and what the windows hide from screen shares (config.toml). Sent on connect and after each reload.",
+      "payload": {
+        "scale": "number",
+        "opacity": "number",
+        "click_through": "boolean",
+        "exclude_from_capture": "boolean"
+      }
     },
     "quiet": {
       "from": "core",

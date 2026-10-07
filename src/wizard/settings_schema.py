@@ -3,7 +3,7 @@
 The one description of the Settings window's fields (labels, ranges,
 hints), in the core rather than in a window: the core checks every value
 it is sent against it before writing config.toml. It started as the Qt
-window's own tables (ui_settings.py), with the same wording.
+settings window's own tables, with the same wording.
 """
 
 from __future__ import annotations

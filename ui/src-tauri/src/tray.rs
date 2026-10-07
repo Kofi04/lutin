@@ -17,27 +17,30 @@ struct TrayAction<'a> {
 }
 
 /// (menu id, label, protocol action). Labels in French, like the Qt menu.
-const ACTIONS: [(&str, &str, &str); 3] = [
+const ACTIONS: [(&str, &str, &str); 4] = [
     ("ask", "Demander à Claude…", "ask"),
     ("region", "Montrer une zone…", "capture.region"),
     ("screen", "Capturer l'écran", "capture.screen"),
+    ("reload", "Recharger la configuration", "config.reload"),
 ];
 
 /// (menu id, label, app window view): the Qt menu's windows, now views.
-const VIEWS: [(&str, &str, &str); 7] = [
+const VIEWS: [(&str, &str, &str); 8] = [
     ("view-quick-note", "Note rapide", "notes/new"),
     ("view-clipboard", "Presse-papiers", "clipboard"),
     ("view-notes", "Notes", "notes"),
     ("view-reminders", "Me rappeler…", "reminders"),
     ("view-history", "Historique des discussions", "history"),
     ("view-agent", "Lancer un agent…", "agent"),
+    ("view-hooks", "Hooks Claude Code…", "hooks"),
     ("view-settings", "Paramètres…", "settings"),
 ];
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let item = |id: &str, label: &str| MenuItem::with_id(app, id, label, true, None::<&str>);
     let menu = Menu::new(app)?;
-    for (id, label, _) in ACTIONS {
+    // The capture actions; "reload" goes with the system entries below.
+    for (id, label, _) in &ACTIONS[..3] {
         menu.append(&item(id, label)?)?;
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
@@ -47,6 +50,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&item("toggle", "Masquer / Afficher le sorcier")?)?;
     menu.append(&item("snap", "Replacer sur la barre")?)?;
+    menu.append(&item("reload", "Recharger la configuration")?)?;
     menu.append(&item("restart", "Redémarrer le cœur")?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&item("quit", "Quitter")?)?;

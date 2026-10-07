@@ -2,8 +2,9 @@
  * The avatar window (DESIGN.md section 4): the figure, its state, and what
  * the mouse does to it.
  *
- * Click opens the panel, dragging moves the window. Tray entries that are
- * core actions arrive here and leave through this window's connection.
+ * Click opens the panel, dragging moves the window, Ctrl + drag points at a
+ * window to show Claude, a file dropped on him is shown too. Tray entries that
+ * are core actions arrive here and leave through this window's connection.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +17,7 @@ import { SETTLE_AFTER_MS } from "../avatar/pose";
 import { visualState } from "../avatar/state";
 import type { CoreClient } from "../core/client";
 import { stats } from "../debug";
-import type { Mood } from "../protocol";
+import type { CorePayloads, Mood } from "../protocol";
 import { useStatus } from "./connect";
 import type { WindowEnv } from "./env";
 
@@ -37,7 +38,10 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
   const [lastActivity, setLastActivity] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const link = useStatus(client);
-  const press = useRef<{ x: number; y: number } | null>(null);
+  const press = useRef<{ x: number; y: number; ctrl: boolean } | null>(null);
+  /** Ctrl + drag under way: the pointer is held until released, anywhere. */
+  const [targeting, setTargeting] = useState(false);
+  const [look, setLook] = useState<CorePayloads["appearance"] | null>(null);
 
   useEffect(() => {
     const off = [
@@ -48,6 +52,11 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
         setClaude(p.state === "offline" && !p.detail ? "idle" : p.state),
       ),
       client.on("quiet", (p) => setHidden(p.on)),
+      client.on("appearance", setLook),
+      // One capture at a time, as the core does: the first file only.
+      env.onFileDrop((paths) => {
+        if (paths[0]) client.send("capture.file", { path: paths[0] });
+      }),
       client.on("avatar.toggle", () => setHidden((h) => !h)),
       client.on("guide.point", () => setGuiding(true)),
       client.on("guide.highlight", () => setGuiding(true)),
@@ -84,6 +93,12 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
   }, []);
 
   useEffect(() => {
+    if (look === null) return;
+    env.applyAppearance(look.scale, look.click_through);
+    env.setCaptureExclusion(look.exclude_from_capture);
+  }, [look, env]);
+
+  useEffect(() => {
     if (hidden) env.hide();
     else env.show();
   }, [hidden, env]);
@@ -97,6 +112,7 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
     return () => clearTimeout(timer);
   }, [lastActivity]);
 
+  const scale = look?.scale ?? 1;
   const state = visualState({ mood, link, claude, idleMs: now - lastActivity });
   stats.state = state;
   stats.settled = settled;
@@ -111,26 +127,53 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
         setNow(Date.now());
       }}
       onMouseLeave={() => setHover(false)}
-      onMouseDown={(e) => {
-        if (e.button === 0) press.current = { x: e.screenX, y: e.screenY };
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        press.current = { x: e.screenX, y: e.screenY, ctrl: e.ctrlKey };
+        // Held by this window until released, even far outside its 72 px.
+        if (e.ctrlKey) e.currentTarget.setPointerCapture(e.pointerId);
       }}
-      onMouseMove={(e) => {
+      onPointerMove={(e) => {
         const start = press.current;
         if (start === null || (e.buttons & 1) === 0) return;
-        if (Math.hypot(e.screenX - start.x, e.screenY - start.y) > DRAG_DISTANCE) {
-          press.current = null;
-          env.startDragging();
+        if (Math.hypot(e.screenX - start.x, e.screenY - start.y) <= DRAG_DISTANCE) return;
+        if (start.ctrl) {
+          setTargeting(true);
+          return;
         }
-      }}
-      onMouseUp={() => {
-        if (press.current !== null) env.togglePanel();
         press.current = null;
+        env.startDragging();
       }}
-      style={{ cursor: "pointer", width: "fit-content" }}
+      onPointerUp={() => {
+        const start = press.current;
+        press.current = null;
+        if (targeting) {
+          setTargeting(false);
+          // Where the pointer really is, in desktop pixels: exact on any
+          // monitor, whatever its scale (screenX would not be).
+          void env.cursorNow().then((at) => {
+            if (at) client.send("capture.window", { x: at.x, y: at.y });
+          });
+          return;
+        }
+        // A Ctrl + click without moving is a slip, not a pick (as in Qt).
+        if (start !== null && !start.ctrl) env.togglePanel();
+      }}
+      onPointerCancel={() => {
+        press.current = null;
+        setTargeting(false);
+      }}
+      style={{
+        cursor: targeting ? "crosshair" : "pointer",
+        width: "fit-content",
+        opacity: look?.opacity ?? 1,
+      }}
     >
       <div style={{ position: "relative" }}>
         <AvatarCanvas
           state={state}
+          size={56 * scale}
+          padding={8 * scale}
           hover={hover}
           settled={settled}
           guiding={guiding}
@@ -138,7 +181,11 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
           onPointer={env.onPointer}
         />
         {pending && (
-          <CountdownRing deadline={pending.deadline} total={pending.total} size={72} />
+          <CountdownRing
+            deadline={pending.deadline}
+            total={pending.total}
+            size={72 * scale}
+          />
         )}
       </div>
     </div>

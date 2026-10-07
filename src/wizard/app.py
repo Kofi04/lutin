@@ -4,13 +4,13 @@ Nothing in here implements a feature; it only decides who talks to whom. That
 keeps the feature modules independently testable and makes the data flow easy
 to follow:
 
-    SystemMonitor --(Sample, Mood)--> TrayIcon + AvatarWindow
-    ClipboardWatcher --> Storage --> HistoryPanel --> ClipboardWatcher
-    GlobalHotkeys / TrayIcon / AvatarWindow --> the dialogs
+    SystemMonitor --(Sample, Mood)--> the presenter
+    ClipboardWatcher --> Storage --> services.py --> the app window
+    GlobalHotkeys / the Tauri UI's commands --> the features
 
-Nothing here touches a widget: what to show goes through `self.ui`, a
-presenter (presenter.py) that is either the Qt widgets or, with --headless,
-the WebSocket to the Tauri UI.
+Nothing here touches a widget: the core has no window. What to show goes
+through `self.ui`, the presenter (presenter_remote.py), which turns it into
+protocol events for the Tauri UI over a local WebSocket.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from .bridge import installer as hooks_installer
 from .capture.controller import CaptureController
 from .claude import ClaudeSession, check_auth
 from .claude.session import OFFLINE
+from .claude.tool_request import ToolRequest
 from .config import (
     Config,
     config_dir,
@@ -50,21 +51,16 @@ from .config import (
 from .features.clipboard import ClipboardWatcher
 from .features.launcher import LaunchError, launch
 from .features.monitor import SystemMonitor
-from .features.nl_reminder import parse_reminder
 from .features.timers import Reminder, TimerManager
 from .history import CaptureInfo, HistoryStore
 from .hotkeys import GlobalHotkeys
 from .mood import Mood, claude_mood_for, combine
+from .onboarding import Check, already_shown
 from .paths import migrate_legacy_data
 from .presenter import Presenter
 from .rpc import Rpc
 from .sessions import EVENT_STATES, SessionRegistry, describe
 from .storage import Storage
-from .tray import app_icon
-from .ui_claude import ToolRequest
-from .ui_hooks import summarise_backup
-from .ui_onboarding import Check, already_shown
-from .ui_palette import Command
 
 
 class _Relay(QObject):
@@ -76,7 +72,7 @@ class _Relay(QObject):
 class AvatarApp:
     """Owns the QApplication and the object graph around it."""
 
-    def __init__(self, argv: list[str], presenter: Presenter | None = None) -> None:
+    def __init__(self, argv: list[str], presenter: Presenter) -> None:
         # Fractional display scaling (125%, 150%) stays fractional instead of
         # being rounded, which keeps the avatar the size the config asks for.
         QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -87,10 +83,8 @@ class AvatarApp:
         self.qt = QApplication.instance() or QApplication(argv)
         self.qt.setApplicationName(APP_NAME)
         self.qt.setOrganizationName(ORG_NAME)
-        # Without this the dialogs wear the generic Python feather in their
-        # title bar and in Alt+Tab.
-        self.qt.setWindowIcon(app_icon())
-        # The app has no main window, so closing a dialog must not quit it.
+        # No window at all (the Tauri UI draws everything): nothing closing
+        # may quit the core.
         self.qt.setQuitOnLastWindowClosed(False)
 
         # Held as an attribute: releasing it would free the lock.
@@ -106,10 +100,6 @@ class AvatarApp:
         ensure_config_file()
         self.config: Config = load_config()
 
-        if presenter is None:
-            from .presenter_qt import QtPresenter
-
-            presenter = QtPresenter()
         self.ui = presenter
         #: What the Tauri UI may ask of the core (rpc.py, services.py).
         self.rpc = Rpc()
@@ -333,19 +323,6 @@ class AvatarApp:
 
     # -- reminders in plain words ----------------------------------------
 
-    def _reminder_commands(self, text: str) -> list[Command]:
-        parsed = parse_reminder(text)
-        if parsed is None:
-            return []
-        return [
-            Command(
-                title=parsed.describe(),
-                kind="action",
-                subtitle="Entrée pour programmer — perdu si l'app est fermée",
-                run=lambda: self._set_reminder(parsed.seconds, parsed.label),
-            )
-        ]
-
     def _copy_clip_image(self, clip_id: int) -> None:
         png = self.storage.clip_image(clip_id)
         if png is not None:
@@ -453,28 +430,6 @@ class AvatarApp:
                 self.history.set_session(agent.conversation_id, agent.session.session_id)
         # Leave the mini-wizard up long enough to be noticed, then tidy up.
         QTimer.singleShot(60_000, lambda key=agent.key: self.sessions.forget(key))
-
-    def _agent_commands(self) -> list[Command]:
-        commands = [
-            Command(
-                title="Lancer un agent…",
-                kind="action",
-                run=self._open_agent_dialog,
-                keywords="tache arriere-plan dossier automatique",
-                order=50,
-            )
-        ]
-        for agent in self.agents.running:
-            commands.append(
-                Command(
-                    title=f"Arrêter l'agent : {_one_line(agent.task, 60)}",
-                    kind="action",
-                    subtitle=agent.last_action,
-                    run=lambda agent_id=agent.id: self.agents.stop(agent_id),
-                    order=51,
-                )
-            )
-        return commands
 
     # -- actions on the selected text ------------------------------------
 
@@ -721,7 +676,7 @@ class AvatarApp:
         self.ui.set_flags(hooks_installed=installed)
         self.notify(
             "Hooks installés" if installed else "Hooks retirés",
-            summarise_backup(saved),
+            hooks_installer.summarise_backup(saved),
         )
         if not installed:
             self.sessions.clear()
@@ -784,95 +739,6 @@ class AvatarApp:
     def _open_palette(self) -> None:
         """One field over everything: actions, launchers, notes, clipboard."""
         self.ui.open_window("palette")
-
-    def _action_commands(self) -> list[Command]:
-        entries = [
-            ("Demander à Claude…", lambda: self._open_ask(None), "question ia chat"),
-            (
-                "Montrer une zone…",
-                lambda: self._start_region("ask"),
-                "capture ecran zone",
-            ),
-            ("Note rapide", self._open_quick_note, "ecrire memo"),
-            (
-                "Presse-papiers",
-                lambda: self.ui.open_window("clipboard"),
-                "copier historique",
-            ),
-            (
-                "Notes",
-                lambda: self.ui.open_window("notes"),
-                "historique memo",
-            ),
-            ("Me rappeler…", self._open_reminder, "minuteur timer pomodoro"),
-            ("Nouvelle discussion Claude", self._reset_claude, "reset effacer"),
-            ("Paramètres…", self._open_settings, "reglages options preferences"),
-            (
-                "Historique des discussions",
-                self._open_history_window,
-                "anciennes conversations reprendre recherche",
-            ),
-            (
-                "Masquer / Afficher le sorcier",
-                self._toggle_avatar,
-                "cacher montrer avatar",
-            ),
-            ("Replacer sur la barre", self.ui.snap_avatar, "position"),
-            (
-                "Recharger la configuration",
-                self.reload_config,
-                "config toml reglages",
-            ),
-            (
-                "Ouvrir le dossier de configuration",
-                self._open_config_folder,
-                "dossier fichiers",
-            ),
-        ]
-        return [
-            Command(title=title, kind="action", run=run, keywords=keywords, order=index)
-            for index, (title, run, keywords) in enumerate(entries)
-        ]
-
-    def _launcher_commands(self) -> list[Command]:
-        return [
-            Command(
-                title=entry.label,
-                kind="launcher",
-                subtitle=entry.target,
-                run=lambda item=entry: self._launch(item),
-                order=100 + index,
-            )
-            for index, entry in enumerate(self.config.launcher)
-        ]
-
-    def _note_commands(self) -> list[Command]:
-        return [
-            Command(
-                title=_one_line(record.body),
-                kind="note",
-                run=lambda body=record.body: self.clipboard.copy_to_clipboard(body),
-                order=200 + index,
-            )
-            for index, record in enumerate(self.storage.list_notes(limit=60))
-        ]
-
-    def _clip_commands(self) -> list[Command]:
-        return [
-            Command(
-                title=_one_line(record.body),
-                kind="clip",
-                # An image row's body is only its label; copying that text
-                # instead of the picture would be a quiet wrong answer.
-                run=(
-                    (lambda clip_id=record.id: self._copy_clip_image(clip_id))
-                    if record.kind == "image"
-                    else (lambda body=record.body: self.clipboard.copy_to_clipboard(body))
-                ),
-                order=300 + index,
-            )
-            for index, record in enumerate(self.storage.list_clips(limit=60))
-        ]
 
     def _launch(self, entry) -> None:
         try:
@@ -956,18 +822,19 @@ class AvatarApp:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Start the app: with Qt windows, or with --headless for the Tauri UI."""
-    args = list(argv if argv is not None else sys.argv)
-    presenter = None
-    watch = None
-    if "--headless" in args[1:]:
-        from .presenter_remote import ParentWatch, ProtocolPresenter, take_token
+    """Start the core, for the Tauri UI that launched it.
 
-        token, generated = take_token()
-        presenter = ProtocolPresenter(token, announce_token=generated)
-        if "--exit-on-stdin-close" in args[1:]:
-            watch = ParentWatch()
-        args = [a for a in args if a not in ("--headless", "--exit-on-stdin-close")]
+    `--headless` is still accepted (the Tauri supervisor passes it, and it
+    was the only way to get this mode before the Qt windows went); it is now
+    the only mode. `--exit-on-stdin-close`: quit when the launcher goes.
+    """
+    from .presenter_remote import ParentWatch, ProtocolPresenter, take_token
+
+    args = list(argv if argv is not None else sys.argv)
+    token, generated = take_token()
+    presenter = ProtocolPresenter(token, announce_token=generated)
+    watch = ParentWatch() if "--exit-on-stdin-close" in args[1:] else None
+    args = [a for a in args if a not in ("--headless", "--exit-on-stdin-close")]
     app = AvatarApp(args, presenter)
     if watch is not None:
         watch.gone.connect(app.shutdown)

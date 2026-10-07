@@ -1,0 +1,64 @@
+{
+  "name": "Sessions Claude Code et agent",
+  "description": "Deux sessions vues par les hooks et un agent lancé par le sorcier : ouvrez la barre (clic sur l'avatar) pour les voir. Le sorcier grandit (appearance.scale 1.25).",
+  "screens": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "steps": [
+    {
+      "at": 0,
+      "type": "connection",
+      "payload": { "state": "online", "detail": "" }
+    },
+    {
+      "at": 0,
+      "type": "appearance",
+      "payload": {
+        "scale": 1.25,
+        "opacity": 1,
+        "click_through": false,
+        "exclude_from_capture": true
+      }
+    },
+    {
+      "at": 0,
+      "type": "mood",
+      "payload": { "mood": "working" }
+    },
+    {
+      "at": 300,
+      "type": "sessions.update",
+      "payload": {
+        "sessions": [
+          {
+            "id": "s1",
+            "label": "desktop-avatar",
+            "colour": "#5AA9FF",
+            "state": "working",
+            "last_action": "Edit src/wizard/app.py"
+          },
+          {
+            "id": "s2",
+            "label": "site-vitrine",
+            "colour": "#3DDC97",
+            "state": "done",
+            "last_action": "Bash npm run build"
+          },
+          {
+            "id": "agent-1",
+            "label": "Faire passer les tests",
+            "colour": "#FFB547",
+            "state": "working",
+            "last_action": "Bash pytest -q",
+            "agent_id": 1,
+            "running": true
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -115,25 +115,3 @@ def test_the_reminder_tool_refuses_absurd_durations():
 
     assert asyncio.run(handlers["set_reminder"]({"minutes": 99999}))["is_error"]
     assert asyncio.run(handlers["set_reminder"]({"minutes": "bientôt"}))["is_error"]
-
-
-def test_a_typed_reminder_tops_the_palette():
-    from wizard.ui_palette import Command, CommandPalette
-
-    palette = CommandPalette()
-    palette.add_source("actions", lambda: [Command(title="Rappel classique")])
-    palette.add_dynamic(
-        lambda text: (
-            [Command(title=parse_reminder(text, NOON).describe())]
-            if parse_reminder(text, NOON)
-            else []
-        )
-    )
-    palette._all = palette._gather()
-
-    palette._refilter("rappelle-moi dans 20 minutes d'appeler Koffi")
-    assert palette._results[0].title == "Rappel dans 20 min : Appeler Koffi"
-
-    palette._refilter("rappel")
-    assert [c.title for c in palette._results] == ["Rappel classique"]
-    palette.deleteLater()

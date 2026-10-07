@@ -9,7 +9,7 @@ import pytest
 
 from wizard.claude import session as mod
 from wizard.claude.session import AuthStatus, check_auth
-from wizard.ui_claude import ToolRequest
+from wizard.claude.tool_request import ToolRequest
 
 # -- describing tool calls -------------------------------------------------
 

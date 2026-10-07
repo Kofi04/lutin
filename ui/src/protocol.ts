@@ -95,6 +95,7 @@ export interface UiPayloads {
     height: number;
   };
   "capture.file": { path: string };
+  "capture.window": { x: number; y: number };
   "capture.confirm": { capture_id: string };
   "capture.cancel": { capture_id?: string };
   "selection.pick": { selection_id: string; action: string };
@@ -122,6 +123,12 @@ export interface CorePayloads {
   mood: { mood: Mood };
   connection: { state: string; detail: string };
   system: { cpu: number; memory: number; battery?: number; charging?: boolean };
+  appearance: {
+    scale: number;
+    opacity: number;
+    click_through: boolean;
+    exclude_from_capture: boolean;
+  };
   quiet: { on: boolean };
   "avatar.toggle": Record<string, never>;
   "panel.open": {
@@ -202,6 +209,7 @@ const UI_TYPES = Object.keys({
   "capture.start": 1,
   "capture.region": 1,
   "capture.file": 1,
+  "capture.window": 1,
   "capture.confirm": 1,
   "capture.cancel": 1,
   "selection.pick": 1,

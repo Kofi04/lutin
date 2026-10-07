@@ -413,6 +413,26 @@ export function fakeServices(): Services {
         if (!String(params.folder ?? "").trim())
           throw new ServiceError("invalid", "Choisissez un dossier qui existe.");
         return {};
+      case "timers.parse": {
+        const m = /^rappel dans (\d+) min (.+)$/i.exec(String(params.text).trim());
+        if (!m) return { reminder: null };
+        const label = m[2]![0]!.toUpperCase() + m[2]!.slice(1);
+        return {
+          reminder: {
+            seconds: Number(m[1]) * 60,
+            label,
+            describe: `Rappel dans ${m[1]} min : ${label}`,
+          },
+        };
+      }
+      case "timers.set":
+        timers.push({
+          id: ++nextId,
+          label: String(params.label),
+          remaining: Number(params.seconds),
+          total: Number(params.seconds),
+        });
+        return {};
       default:
         throw new ServiceError("unknown_method", `Méthode inconnue : ${method}`);
     }

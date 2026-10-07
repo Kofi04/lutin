@@ -280,3 +280,10 @@ def is_stale(path: Path | None = None) -> bool:
                 if script and not Path(script).exists():
                     return True
     return False
+
+
+def summarise_backup(path) -> str:
+    """The backup made before writing, in one line for a notification."""
+    if path is None:
+        return "Aucune sauvegarde nécessaire (le fichier n'existait pas)."
+    return f"Sauvegarde : {path.name}"

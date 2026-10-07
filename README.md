@@ -5,25 +5,29 @@ icon, global hotkeys, clipboard history, quick notes and countdown reminders.
 He shows you what your machine and your Claude Code sessions are doing, and he
 answers questions about whatever is on your screen.
 
-![the fourteen poses](docs/poses.png)
-
 > **This app used to be called Lutin.** The rename moved its data folder from
 > `%APPDATA%\Lutin` to `%APPDATA%\LittleWizard`, so the first start after
 > upgrading **copies** your settings, notes, clipboard history and saved avatar
 > position across and tells you it did. The old folder is left exactly as it
 > was — delete it yourself once you are satisfied. If you had the Claude Code
 > hooks installed, they still point at the old script name: the tray menu
-> offers *Réinstaller les hooks Claude Code…* to fix that, and says so on
+> offers *Hooks Claude Code…* → *Réinstaller…* to fix that, and says so on
 > startup.
 
 ## Requirements
 
-- Windows 10 or 11
-- Python 3.11+ (tested on 3.14)
-- PySide6 — the only runtime dependency (plus `claude-agent-sdk` for the Claude
-  features and `pygments` for code highlighting)
+- Windows 10 or 11, with WebView2 (built into Windows 11, installed by Edge on
+  Windows 10)
+- To run from source: Python 3.11+ (tested on 3.14), Node 20+, and Rust
+  (`rustup`, MSVC toolchain) for the Tauri shell
 
-Optional extras, each of which the app starts fine without:
+Two halves, one app. **The core** is Python (PySide6 without any window, the
+Claude Agent SDK, SQLite): hotkeys, captures, Claude, the hook bridge, the
+data. **The UI** is Tauri 2 (React, TypeScript, WebView2): the avatar, the
+panel, the guide cursor, the app window, the tray icon. Tauri starts the core
+and they talk over a local WebSocket (see *How the UI talks to the core*).
+
+Optional extras of the core, each of which the app starts fine without:
 
 | Extra | Brings | Needed for |
 |---|---|---|
@@ -33,26 +37,19 @@ Optional extras, each of which the app starts fine without:
 
 ## Install
 
+From source:
+
 ```powershell
 py -3.14 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
-powershell -ExecutionPolicy Bypass -File scripts\shortcut.ps1
+cd ui
+npm install
+npm run tauri dev     # Vite + the Rust shell, which starts the core
 ```
 
-The last line puts a **Little Wizard** icon on the Desktop and in the Start
-Menu. Double-click it to launch — that is the whole story from then on. To keep
-it one click away, right-click the Start Menu entry → *More* → *Pin to taskbar*.
-
-`scripts\shortcut.ps1 -Remove` deletes both shortcuts again;
-`-DesktopOnly` skips the Start Menu entry.
-
-The shortcut points at `.venv\Scripts\wizard.exe`, the GUI launcher that
-`pip install -e .` generates from the `[project.gui-scripts]` entry point. It is
-a GUI-subsystem binary, so no console window ever appears. If you prefer the
-command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
-
-> **The shortcut hard-codes this folder.** Move or rename the project and the
-> icon breaks — just re-run `scripts\shortcut.ps1` to point it at the new path.
+The shell finds the core in the repository's `.venv` (or wherever the
+`WIZARD_CORE` environment variable points). Packaging into one installer is
+described in *Packaging*.
 
 > **Windows 10 hides new tray icons.** On first run the wizard's tray icon goes
 > into the overflow area behind the `^` chevron. Drag it onto the taskbar, or
@@ -65,8 +62,8 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
 > docstrings and this README stay English, as does anything the user never sees
 > (the `Mood` values, config keys, hotkey modifier names). Everything displayed —
 > menus, dialogs, notifications, the comments inside `config.default.toml` — is
-> French. Strings are inline rather than routed through Qt's `tr()`, because the
-> app targets one language and a `.ts`/`.qm` pipeline would be pure ceremony.
+> French. Strings are inline rather than routed through a translation layer,
+> because the app targets one language and that pipeline would be pure ceremony.
 
 | Action | Hotkey | Menu entry |
 |---|---|---|
@@ -80,20 +77,21 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
 | Show a window | `Ctrl`+drag the avatar onto it | — |
 | Show an image | drop the file on the avatar | — |
 | Quick note | `Ctrl+Alt+N` | *Note rapide* |
-| Clipboard history | `Ctrl+Alt+V` | *Presse-papiers* (or a single tray click) |
-| Command palette | `Ctrl+Alt+Space` | *Lancer* |
+| Clipboard history | `Ctrl+Alt+V` | *Presse-papiers* |
+| Command palette | `Ctrl+Alt+Space` | `/` in the panel's bar |
 | Show / hide the avatar | `Ctrl+Alt+A` | *Masquer / Afficher le sorcier* |
 | Reminders | — | *Me rappeler…* |
 
-- **The command palette** (`Ctrl+Alt+Space`) searches actions, launcher entries,
-  notes and clipboard history together, so you never have to remember which menu
-  a thing lives in. Fuzzy, accent-insensitive (`reunion` finds *Réunion*), and
-  entirely keyboard-driven.
-- **Left-click the avatar** opens the full action menu; **drag it** to move it
-  anywhere, and it remembers where you left it.
-- **Clipboard history** records text copies into SQLite, skipping blanks and
-  consecutive duplicates, pruned to `max_entries`. Select an entry and press
-  Enter to put it back on the clipboard.
+- **The command palette** (`Ctrl+Alt+Space`) opens the panel's bar with `/`
+  typed: the actions, the views of the app window, your launcher entries and
+  the running agents, in one list. Fuzzy, accent-insensitive (`reunion` finds
+  *Réunion*), and entirely keyboard-driven. Type a reminder in plain words
+  (`/rappel dans 20 min sortir le pain`) and it is offered first.
+- **Click the avatar** to open the panel; **drag him** to move him anywhere,
+  and he remembers where you left him (tray: *Replacer sur la barre*).
+- **Clipboard history** records copies into SQLite, skipping blanks and
+  consecutive duplicates, pruned to `max_entries`. Double-click an entry in the
+  app window to put it back on the clipboard (a picture as a picture).
 - **Moods** come from CPU, RAM and battery: calm → busy → stressed, plus a
   tired face when you are below `battery_low` on battery power. A mood that
   comes from Claude — a session working, or waiting for your answer — outranks
@@ -106,9 +104,9 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
 - **Reminders** accept `25`, `25m`, `1h30`, `90s` or `25:00`, with presets
   including a 25-minute pomodoro.
 - **Captures** are downscaled to a 1568px long edge (past that Claude
-  downsamples anyway) and always shown in a confirmation dialog before they can
-  be used. Plain drag still moves the avatar; `Ctrl`+drag is what points at a
-  window, so neither gesture shadows the other.
+  downsamples anyway) and always shown in the panel for confirmation before
+  they can be used. Plain drag still moves the avatar; `Ctrl`+drag is what
+  points at a window (released over it), so neither gesture shadows the other.
 
 - **Claude** answers in the wizard, never in a terminal. The conversation is one
   long-lived connection rather than a fresh CLI per question, so asking twice
@@ -119,12 +117,12 @@ command line, `.venv\Scripts\pythonw.exe -m wizard` does the same thing.
   both the sessions Little Wizard starts and the ones you run yourself. Not answering
   denies: silence is not consent.
 - **Your own Claude Code sessions** show up too, once the hooks are installed:
-  what each one is reading, editing and running, one coloured avatar per
-  session.
+  what each one is reading, editing and running, one coloured line per session
+  above the panel's bar, with the agents the wizard runs (*Arrêter* stops one).
 
 ## Claude Code hooks
 
-*Installer les hooks Claude Code…* in the tray menu adds Little Wizard to
+*Hooks Claude Code…* → *Installer…* in the tray menu adds Little Wizard to
 `~/.claude/settings.json` so your own sessions show up in the avatar and their
 permission prompts can be answered there. Before writing anything it backs the
 file up with a timestamp, **merges** rather than replaces, and shows you the
@@ -229,10 +227,10 @@ Local OCR sends nothing. Two guarantees around captures:
   you took.
 
 Since clipboard history captures whatever you copy — passwords included — turn
-**Enregistrer le presse-papiers** off in the tray menu before copying secrets, or
-set `clipboard.enabled = false`. **Copied images are kept too** (screenshots
-included) — `clipboard.images = false` stops that while keeping text. A
-screenshot carries the same risk over a wider
+*Enregistrer l'historique du presse-papiers* off (Paramètres → Système) before
+copying secrets, or set `clipboard.enabled = false`. **Copied images are kept
+too** (screenshots included) — `clipboard.images = false` stops that while
+keeping text. A screenshot carries the same risk over a wider
 area: displayed passwords, private messages, client data. Check the preview.
 
 The History window's *Mes sessions Claude Code* view **reads** the transcripts
@@ -404,37 +402,30 @@ screen sharing**; they are only ever removed from the captures this app makes.
 
 ## Look and feel
 
-One design system, in `src/wizard/design/`, holds every colour, size, radius,
-font and animation duration. Before it, the same stylesheet was pasted into four
-files and had drifted; now nothing outside that package names a colour.
+One design system, `ui/src/design/tokens.ts`, holds every colour, size,
+radius, font and spring (DESIGN.md section 3). A test fails if a colour is
+written anywhere else.
 
-- **Light and dark follow Windows automatically**, along with your accent
-  colour.
-- **The accent is checked for contrast, and nudged if it fails.** Windows' own
-  default blue `#0078D7` reaches only 4.499 against white text and worse against
-  black — *no* text colour passes WCAG AA on it. Rather than lower the bar or
-  ignore your choice, the fill is darkened in small steps until it passes:
-  `#0078D7` becomes `#0071cb`, the same blue, now readable.
-- **Mica and rounded corners on Windows 11**, via `DwmSetWindowAttribute`, with
-  an opaque themed fallback on Windows 10. **The Windows 11 path is written but
-  unverified** — this was developed on Windows 10 22H2, where those attributes
-  simply return a failure code. The fallback is the tested path.
-- **Animations honour the system setting.** Everything goes through one
-  `animate()` that checks `SPI_GETCLIENTAREAANIMATION` and jumps straight to the
-  end state when Windows says not to animate.
-- **Notifications are ours**, not tray balloons: themed, stacked above the
-  avatar, dismissed on a click, paused while the pointer is over them. Approvals
-  stay a real window, because a toast is something you may ignore and an
-  approval is not.
+- **Dark, always.** The floating surfaces are dark by design (DESIGN.md
+  section 3), and the app window follows them. There is no light theme.
+- **Animations honour the system setting**: WebView2 reports Windows'
+  *Show animations* as `prefers-reduced-motion`, and the avatar and the
+  panel then jump to their end states.
+- **Notifications are ours**, not tray balloons: three at most, stacked above
+  the avatar in the panel's window, dismissed on a click. Approvals stay in
+  the panel until answered or timed out, because a toast is something you may
+  ignore and an approval is not.
 - **He gets out of the way of full-screen apps.** Rather than comparing window
   rectangles — which a maximised window fools and a borderless game defeats —
-  the app asks Windows through `SHQueryUserNotificationState` and hides while a
-  game, a video or a presentation is running. He comes back afterwards, unless
-  you had hidden him yourself first.
+  the core asks Windows through `SHQueryUserNotificationState` and the windows
+  hide while a game, a video or a presentation is running. He comes back
+  afterwards, unless you had hidden him yourself first.
+- **Size, opacity and click-through** (`[appearance]` in config.toml, or the
+  settings) apply to the avatar as soon as they are saved.
 
 ### Settings, and why they do not wreck your config
 
-*Paramètres…* (tray menu or command palette) is a window over `config.toml`,
+*Paramètres…* (tray menu, or `/` in the panel) is a view over `config.toml`,
 which stays the source of truth. It writes **only the keys you changed, one
 line at a time**, so two things survive a save that a normal TOML serialiser
 would destroy:
@@ -442,7 +433,7 @@ would destroy:
 - **The French comments** explaining each setting. A round-trip through a
   TOML library drops every one of them; `config_writer.py` replaces just the
   value and keeps the comment in its column.
-- **A hand edit made while the window was open.** Writing a full snapshot
+- **A hand edit made while the view was open.** Writing a full snapshot
   would silently revert it. Writing only what changed does not.
 
 Shortcuts are captured live — click the field, press the combination — and
@@ -454,78 +445,26 @@ silently never fire. Shift on its own is refused as a modifier, since
 
 ### Answers with code
 
-While an answer streams it is one plain view, which keeps up cheaply. Once it
-is complete, an answer containing code is re-rendered as separate blocks: prose
-through Qt's Markdown, each code block highlighted (Pygments, with a palette
-matched to the theme) and given **its own Copier button**. Rebuilding widgets
-on every streamed chunk would flicker and cost far more. Code keeps its own
-line breaks and scrolls sideways when long: wrapping would misrepresent
-indentation, which in Python is the syntax.
+Answers are Markdown, rendered as text and never as HTML (an answer quoting a
+`<script>` shows it, it does not run it). Each code block keeps its own line
+breaks, scrolls sideways when long — wrapping would misrepresent indentation,
+which in Python is the syntax — and has **its own Copier button**.
 
 ### First run
 
-A welcome screen, shown once, introduces him, lists the shortcuts worth
+A welcome view, shown once, introduces him, lists the shortcuts worth
 learning, and **checks this machine** rather than promising: whether Claude
 Code is logged in, whether the hooks are installed (with a button to do it),
-and where Windows 10 hides the tray icon. It stays on top, because at logon
-with autostart the app is a background process, and Windows would otherwise
-open it behind whatever you had in front — where it was, until that was
-caught by checking which window was actually painted at its centre.
+and where Windows 10 hides the tray icon.
 
 ## The character
 
 Little Wizard is a small African wizard: dark skin, big round eyes, an indigo
-robe and a pointed hat banded with sober bogolan- and kente-inspired geometry,
-cowrie shells, and a carved staff whose tip carries the app's state light.
-
-He is drawn **twice over**, and the app picks whichever is available:
-
-| Source | When | Where |
-|---|---|---|
-| `character/painter.py` | always — no assets needed | QPainter, resolution-independent |
-| `character/sheet.py` | as soon as `assets/character/wizard_idle_1.png` exists | PNG frames, which then take over silently |
-
-Nothing else in the app knows which one it got. `character/animation.py` owns
-the clock — poses, transitions, blinking, dozing off — and hands both renderers
-the same `Frame`. It imports nothing from Qt, which is why the fiddly parts (a
-pose that never reverts, blinking that stops re-arming, waking up onto a mood
-that changed while he slept) are covered by ordinary unit tests instead of by
-looking at the screen.
-
-To generate hand-drawn art, **`docs/ASSETS_BRIEF.md`** has the character sheet,
-the exact palette, the framing rules and a ready-to-paste prompt per pose. A
-partial set is fine: only `idle` is required and missing poses fall back to it.
-
-To look at every pose at once:
-
-```powershell
-.venv\Scripts\python.exe tools\contact_sheet.py            # from code
-.venv\Scripts\python.exe tools\contact_sheet.py --assets   # from assets/
-```
-
-That writes `docs/poses.png` at 96, 48, 32 and 16px, and prints which renderer
-it used — which is the quickest way to find out why your PNGs are not showing
-up (almost always a filename that does not match).
-
-**Cost.** The body — gradients, clipped paths, woven bands — is rendered once
-into a pixmap and reused; only the eyes, mouth, staff light and props are drawn
-each frame, and the halo is a cached pixmap rather than a live radial gradient.
-Drawn naively the character cost 5.3% of a core at idle; it now costs **0.7% of
-one core** (0.18% of a four-core machine), measured over 40 seconds.
-
-## The icon
-
-`src/wizard/app.ico` is generated, not hand-drawn — it comes from the same
-code as the running character:
-
-```powershell
-.venv\Scripts\python.exe tools\make_icon.py
-```
-
-Re-run it after changing the character, then re-run `scripts\shortcut.ps1` so the
-shell picks up the new file. It writes nine sizes (16 to 256) because Windows
-picks a different one per context, and below 32px it enlarges the eyes and
-thickens the mouth — at 16px the default proportions blur into the body.
+robe and a pointed hat, and a carved staff whose orb carries the app's state
+light. He is drawn in code on a 2D canvas (`ui/src/avatar/`): `pose.ts` turns
+a state and a clock into a pose, `draw.ts` paints it, `renderer.ts` decides
+when a frame is worth painting at all. Those parts are pure functions, tested
+without a screen; DESIGN.md section 4 describes every state.
 
 ## Packaging
 
@@ -546,93 +485,65 @@ just make a shortcut to it by hand — a packaged build needs no virtualenv.
 ## Architecture
 
 ```
-src/wizard/
-  branding.py       the app name and every identifier derived from it
-  paths.py          where files live, and the migration from the old name
-  mood.py           the eight moods, and which one wins
-  sessions.py       every Claude Code session seen, internal or external
-  claude/           the Agent SDK: one persistent session, permissions
-  capture/          region, window and file capture
-  bridge/           named pipe + settings.json hook installer
-  ui_claude.py      ask panel, approval card
-  ui_capture.py     the confirm-before-send preview
-  ui_hooks.py       the settings.json diff
-  app.ico           the app icon, generated by tools/make_icon.py
-  winapi.py         ctypes wrappers: taskbar, CPU/RAM/battery, hotkeys, autostart
-  config.py         TOML loading with defaults and clamping
-  storage.py        SQLite: notes + clipboard history
-  character/        the wizard: poses, animation engine, two renderers
-  design/           tokens, theme, stylesheet, window materials, motion
-  fuzzy.py          subsequence ranking for the command palette
-  ui_palette.py     the command palette
-  ui_toast.py       in-app notifications
-  ui_settings.py    the settings window
-  ui_onboarding.py  the first-run screen
-  config_writer.py  edits config.toml one line at a time, keeping comments
-  hotkey_spec.py    capturing a shortcut, and finding two that collide
-  markdown_blocks.py  splitting an answer into prose and highlighted code
-  overlay/          on-screen guidance: mapping, scene, surfaces, MCP tools
-  capture/cloak.py  keeps our windows out of our own screenshots
-  schema.py         numbered SQLite migrations on PRAGMA user_version
-  history.py        conversations, messages, thumbnails, FTS5 search
+src/wizard/              the core (Python, no window)
+  app.py                 wiring only: who talks to whom
+  presenter.py           what the app shows, as one interface
+  presenter_remote.py    ...as protocol events to the Tauri UI
+  protocol.py            the UI protocol, checked both ways
+  protocol_messages.json every message, read by Python and TypeScript
+  ws_server.py           the local WebSocket: token, origin, size cap
+  rpc.py, services.py    the requests the app window may make, by name
+  settings_schema.py     the settings' labels and limits, checked again here
+  onboarding.py          the first-run state and the machine's checks
+  screens.py             desktop coordinates <-> (screen id, position)
+  branding.py, paths.py  the name, where files live, migration from Lutin
+  config.py              TOML loading with defaults and clamping
+  config_writer.py       edits config.toml one line at a time, keeping comments
+  storage.py, schema.py  SQLite: notes, clipboard, numbered migrations
+  history.py             conversations, messages, thumbnails, FTS5 search
+  claude/                the Agent SDK: one persistent session, permissions
   claude_transcripts.py  read-only access to ~/.claude/projects
-  ui_history.py     the History window
-  assistant/        selection actions, agents, memory, local OCR
-  claude/oneshot.py one tool-less question outside the conversation
-  ui_selection.py   the result window for selection actions
-  ui_sessions.py    mini-wizards, one per session or agent
-  ui_agent.py       launching an agent
-  features/nl_reminder.py  "rappelle-moi dans 20 minutes…"
-  avatar_window.py  the frameless translucent always-on-top window
-  hotkeys.py        RegisterHotKey bridged into Qt via a native event filter
-  tray.py           tray icon and menu
-  ui.py             quick note, history panel, reminder dialog
-  app.py            wiring only: who talks to whom
-  presenter.py      what the app shows, as one interface
-  presenter_qt.py   ...as Qt widgets (the default)
-  presenter_remote.py  ...as events to the Tauri UI (--headless)
-  protocol.py       the UI protocol, checked both ways
-  protocol_messages.json  every message, read by Python and TypeScript
-  ws_server.py      the local WebSocket: token, origin, size cap
-  screens.py        desktop coordinates <-> (screen id, position)
-  features/         launcher, clipboard watcher, monitor, timers
+  capture/               grabbing a region, a window, a file; the cloak
+  overlay/               on-screen guidance: mapping, scene, MCP tools
+  bridge/                named pipe + settings.json hook installer
+  assistant/             selection actions, agents, memory, local OCR
+  features/              launcher, clipboard watcher, monitor, timers, reminders
+  hotkeys.py             RegisterHotKey, owned by one invisible widget
+  hotkey_spec.py         finding two shortcuts that collide
+  winapi.py              ctypes: taskbar, CPU/RAM/battery, hotkeys, autostart
+  mood.py, sessions.py   the moods, and every Claude Code session seen
 hooks/
-  wizard_hook.py    the hook handler Claude Code spawns (stdlib only)
-scripts/
-  shortcut.ps1      creates/removes the Desktop and Start Menu shortcuts
-ui/                 the Tauri UI (phase M1: the typed protocol only)
-tools/
-  make_icon.py      renders the character into a multi-resolution app.ico
-  contact_sheet.py  renders every pose to docs/poses.png, to look at them
-assets/character/   hand-drawn frames, if you have any (see docs/ASSETS_BRIEF.md)
-PLAN.md             the plan this app is being built out against
-DESIGN.md           the design of the Tauri UI
+  wizard_hook.py         the hook handler Claude Code spawns (stdlib only)
+ui/                      the Tauri UI
+  src-tauri/             the Rust shell: windows, tray, core supervisor
+  src/avatar/            the drawn avatar
+  src/panel/             the panel and its states
+  src/guide/             the guide cursor
+  src/app/               the app window and its views
+  src/core/              the connection to the core
+  src/playground/        the browser playground and its fake core
+PLAN.md                  the plan this app is being built out against
+DESIGN.md                the design of the UI
 ```
 
 Decisions worth knowing about:
 
-- **Placement uses Qt, not Win32.** `QScreen.availableGeometry()` already
-  reports the area the taskbar left free, in logical pixels and DPI-correct.
-  `SHAppBarMessage` is only consulted for the auto-hide flag, which Qt does not
-  expose.
-- **Global hotkeys need a native event filter.** `RegisterHotKey` posts
-  `WM_HOTKEY` to a window's message queue, and Qt owns that queue, so
-  `QAbstractNativeEventFilter` is the supported place to intercept it. A
-  never-shown widget owns the registrations so hotkeys survive hiding the
-  avatar.
-- **Two permission paths, one panel.** Sessions Little Wizard starts are gated by the
-  SDK's `can_use_tool` callback; sessions you start are gated by the hook. Both
-  end up in the same approval card, and the hook skips sessions Little Wizard started
-  (`WIZARD_OWN_SESSION`) so nothing is asked twice.
+- **Global hotkeys need a window.** `RegisterHotKey` posts `WM_HOTKEY` to a
+  window's message queue; one never-shown Qt widget owns the registrations and
+  a native event filter reads them. It is the core's only widget, and why the
+  core is a `QApplication` at all.
+- **Two permission paths, one panel.** Sessions Little Wizard starts are gated
+  by the SDK's `can_use_tool` callback; sessions you start are gated by the
+  hook. Both end up in the same approval card, and the hook skips sessions
+  Little Wizard started (`WIZARD_OWN_SESSION`) so nothing is asked twice.
 - **The bridge is a named pipe.** `QLocalServer` is one on Windows, which is
   the exact equivalent of the Unix socket coucou uses, and it already lives in
   the Qt event loop.
 
-## Headless core (Tauri UI, in progress)
+## How the UI talks to the core
 
-The Qt windows are being replaced by a Tauri 2 UI (PLAN.md, *Migration UI*).
-The Python code stays, as a core with no window, and talks to the UI over a
-local WebSocket. Phase M1 is the core side:
+The core has no window (phase M7 removed the Qt ones) and talks to the Tauri UI
+over a local WebSocket. Run on its own, for a test:
 
 ```powershell
 $env:WIZARD_UI_TOKEN = "<a long random secret>"
@@ -650,8 +561,7 @@ already running, 4 if the socket cannot listen.
   message; `protocol.py` and `ui/src/protocol.ts` both read it, and the
   TypeScript types do not compile if they drift from it.
 - **One seam.** `app.py` never touches a widget: it talks to a *presenter*,
-  either `QtPresenter` (today's windows, still the default) or
-  `ProtocolPresenter` (the socket).
+  `ProtocolPresenter`, which turns everything into events on the socket.
 - **The promises hold without the UI.** An approval nobody answers is denied
   at its timeout by the core itself. A capture reaches Claude only after a
   `capture.confirm` naming the exact capture the UI was shown. Before a grab,
@@ -665,11 +575,6 @@ Measured on the real Windows platform: no visible window, a screen capture
 through the cloak handshake in 0.35 s, 0.08 % of one core idle with a UI
 connected (60 s), and a clean exit in 0.3 s on the `quit` action.
 
-Not in headless mode yet: the settings, history, quick note, palette,
-onboarding and hook-diff windows. Asked for, they become a `window.open` event,
-and nothing is written meanwhile (installing the hooks needs the diff shown
-first). They come back in phase M6 bis.
-
 ### The Tauri shell (phase M2)
 
 `ui/src-tauri` is the Tauri 2 application: it starts the core, keeps it
@@ -681,9 +586,6 @@ cd ui
 npm install
 npm run tauri dev     # Vite dev server + the Rust shell, which starts the core
 ```
-
-The windows are placeholders for now (a coloured disc for the avatar, the raw
-events in the panel, a marker in the overlay); the real ones are phases M4–M6.
 
 - **The core** is started as `python -m wizard --headless
   --exit-on-stdin-close`, from the repository's `.venv` (or `WIZARD_CORE`). It
@@ -702,7 +604,8 @@ events in the panel, a marker in the overlay); the real ones are phases M4–M6.
   time the guide draws.
 - **Screen sharing**: `WDA_EXCLUDEFROMCAPTURE` is **accepted on all three**
   WebView2 windows, overlay included, where Qt was refused it on every
-  translucent window. The order matters: the overlay gets it before being made
+  translucent window. `ui.exclude_from_capture = false` turns it off on every
+  window. The order matters: the overlay gets it before being made
   click-through, which makes it layered, and keeps it afterwards.
 
 Measured on this machine: the core ready 2.3–9.6 s after launch; after a

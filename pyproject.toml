@@ -49,7 +49,7 @@ wizard = "wizard.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-wizard = ["config.default.toml", "app.ico", "protocol_messages.json"]
+wizard = ["config.default.toml", "protocol_messages.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

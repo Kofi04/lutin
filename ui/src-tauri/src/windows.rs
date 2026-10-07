@@ -9,6 +9,8 @@ use tauri::{
     WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use crate::{position, protect};
 
 pub const AVATAR: &str = "avatar";
@@ -31,6 +33,13 @@ pub const OVERLAY_PREFIX: &str = "overlay-";
 
 /// DESIGN.md section 4: a 56 px figure in a 72 px window.
 const AVATAR_SIZE: f64 = 72.0;
+/// `appearance.scale` (config.toml), as f64 bits: the avatar window is
+/// AVATAR_SIZE times this, and so is everything measured on it.
+static AVATAR_SCALE: AtomicU64 = AtomicU64::new(0x3FF0_0000_0000_0000); // 1.0
+
+fn avatar_scale() -> f64 {
+    f64::from_bits(AVATAR_SCALE.load(Ordering::SeqCst))
+}
 const PANEL_WIDTH: f64 = 520.0;
 const PANEL_HEIGHT: f64 = 420.0;
 /// Space between the avatar and the screen edges, in logical pixels.
@@ -103,7 +112,7 @@ pub fn snap_avatar(avatar: &WebviewWindow) -> tauri::Result<()> {
     };
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
-    let size = ((AVATAR_SIZE + MARGIN) * scale).round() as i32;
+    let size = ((AVATAR_SIZE * avatar_scale() + MARGIN) * scale).round() as i32;
     let x = area.position.x + area.size.width as i32 - size;
     let y = area.position.y + area.size.height as i32 - size;
     let at = PhysicalPosition::new(x, y);
@@ -323,10 +332,41 @@ pub fn avatar_anchor(app: AppHandle) -> Option<crate::cursor::Cursor> {
     let scale = avatar.scale_factor().ok()?;
     // The orb, in the window's CSS pixels: 8 of padding, then (49, 15) on
     // the 56-wide figure (avatar/draw.ts).
+    let scale = scale * avatar_scale();
     Some(crate::cursor::Cursor {
         x: at.x + (57.0 * scale).round() as i32,
         y: at.y + (23.0 * scale).round() as i32,
     })
+}
+
+/// The avatar's size and whether clicks go through him (config.toml,
+/// `[appearance]`), told by his page. Grows and shrinks from his bottom-right
+/// corner, so he stays where he sits on the taskbar.
+#[tauri::command]
+pub fn avatar_appearance(app: AppHandle, scale: f64, click_through: bool) -> Result<(), String> {
+    let Some(avatar) = app.get_webview_window(AVATAR) else {
+        return Ok(());
+    };
+    let scale = scale.clamp(0.5, 4.0);
+    let run = || -> tauri::Result<()> {
+        let before = avatar.outer_size()?;
+        let at = avatar.outer_position()?;
+        AVATAR_SCALE.store(scale.to_bits(), Ordering::SeqCst);
+        let side = AVATAR_SIZE * scale;
+        avatar.set_min_size(Some(LogicalSize::new(side, side)))?;
+        avatar.set_size(LogicalSize::new(side, side))?;
+        let after = avatar.outer_size()?;
+        let moved = PhysicalPosition::new(
+            at.x + before.width as i32 - after.width as i32,
+            at.y + before.height as i32 - after.height as i32,
+        );
+        if moved != at {
+            position::placing(moved);
+            avatar.set_position(moved)?;
+        }
+        avatar.set_ignore_cursor_events(click_through)
+    };
+    run().map_err(|e| e.to_string())
 }
 
 #[tauri::command]

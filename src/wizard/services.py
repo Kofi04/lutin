@@ -22,6 +22,7 @@ from .assistant import memory as user_memory
 from .bridge import installer as hooks_installer
 from .config import load_config
 from .config_writer import ConfigWriteError, Edit, write_edits
+from .features.nl_reminder import parse_reminder
 from .features.timers import parse_duration
 from .history import KINDS, group_by_date
 from .paths import config_path, state_path
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from .app import AvatarApp
 
 
-#: Shared with the Qt dialog (ui_agent.py) while both exist.
+#: The key the Qt dialog used: a folder chosen before M7 is still offered.
 _LAST_FOLDER = "agents/last_folder"
 
 
@@ -280,6 +281,26 @@ def register(rpc: Rpc, app: AvatarApp) -> None:
     @method("timers.cancel_all")
     def timers_cancel_all(params: dict) -> dict:
         timers.cancel_all()
+        return {}
+
+    @method("timers.parse")
+    def timers_parse(params: dict) -> dict:
+        """A reminder in plain words ("rappel dans 20 min sortir le pain"), or nothing."""
+        parsed = parse_reminder(str(params.get("text", "")))
+        if parsed is None:
+            return {"reminder": None}
+        return {
+            "reminder": {
+                "seconds": parsed.seconds,
+                "label": parsed.label,
+                "describe": parsed.describe(),
+            }
+        }
+
+    @method("timers.set")
+    def timers_set(params: dict) -> dict:
+        # The plain-words path: the same notification as the Qt palette gave.
+        app._set_reminder(int(params["seconds"]), str(params.get("label", "")))
         return {}
 
     # -- launcher ----------------------------------------------------------

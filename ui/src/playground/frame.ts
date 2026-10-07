@@ -38,6 +38,10 @@ export class Frame {
       startDragging: () => hooks.log?.(`${role} : glisser (sans effet ici)`),
       togglePanel: () => hooks.togglePanel?.(),
       openApp: (view) => hooks.openApp?.(view),
+      applyAppearance: (scale, clickThrough) =>
+        hooks.log?.(`${role} : taille ${scale}, clics traversants ${clickThrough}`),
+      setCaptureExclusion: () => {},
+      onFileDrop: () => () => {},
       syncOverlays: async () => {},
       onPointer: hooks.onPointer ?? (() => () => {}),
       placePanel: async (width, height) => hooks.onSize?.(width, height),

@@ -1,7 +1,6 @@
 """The first-run state and the facts the welcome shows, without any window.
 
-Shared by the Qt welcome (ui_onboarding.py) and the core's services for the
-Tauri one (services.py).
+Read by the core's services (services.py) for the app window's welcome.
 """
 
 from __future__ import annotations

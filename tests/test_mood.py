@@ -96,21 +96,3 @@ def test_only_idle_sessions_mean_no_claude_mood():
 
 def test_a_finished_session_still_shows():
     assert claude_mood_for(["done"]) is Mood.DONE
-
-
-def test_every_mood_can_be_drawn():
-    # A gap anywhere along mood -> pose -> colour paints the avatar with a
-    # KeyError at runtime, on a background thread, where nobody sees it.
-    from wizard.character.emote import emote_for
-    from wizard.character.palette import ACCENT
-
-    for mood in Mood:
-        assert emote_for(mood) in ACCENT, mood
-
-
-def test_every_pose_has_a_colour():
-    from wizard.character.emote import Emote
-    from wizard.character.palette import ACCENT
-
-    for emote in Emote:
-        assert emote in ACCENT, emote

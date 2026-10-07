@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau) · M6 ✅ (curseur guide) · M6 bis ✅ (fenêtre app) · M7 à faire — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau) · M6 ✅ (curseur guide) · M6 bis ✅ (fenêtre app) · M7a ✅ (Qt visible retiré) · M7b à faire (packaging) — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -428,7 +428,7 @@ Au-delà de chaque phase :
 
 1. `pytest` — parsers, stockage et migrations, mapping de coordonnées, machine à états
    de la voix, écriture de config préservant les commentaires, protocole du pont.
-2. `ruff check src tests tools hooks`.
+2. `ruff check src tests hooks`.
 3. **Non-régression sur Claude Code** : hooks installés, mesurer une session témoin,
    tuer l'app, refaire la même session. Écart attendu : nul.
 4. **Mode dégradé** : chaque extra absent une par une (`[voice]`, `[live]`, `[ocr]`),
@@ -903,6 +903,36 @@ réextrait à chaque lancement) sous **Python 3.13** dans un venv dédié, décl
 plus que la fenêtre propriétaire des raccourcis ; installer sur une session Windows
 propre, lancer, capturer, poser une question, tuer le core et le voir revenir ;
 désinstaller sans laisser de processus.
+
+**Fait (M7a — le Qt visible retiré)** — Tests : 643 Python, 247 Vitest, 5 Rust.
+
+- Retirés : `presenter_qt.py`, `avatar_window.py`, `tray.py`, `ui.py`, les 12 `ui_*.py`, les
+  paquets `character/` et `design/` (Python), `overlay/manager.py` et `surface.py`, le voile
+  de sélection et le halo de `capture/` (`grab_rect` est dans `capture/grab.py`, la recherche
+  de fenêtre reste dans `capture/window.py`), `tools/` (icône et planche des poses, dessinées
+  par le Qt), `scripts/shortcut.ps1` (raccourci vers le lanceur Python), `app.ico`,
+  `docs/ASSETS_BRIEF.md`, et les tests de ces widgets. `spec_from_qt` aussi : la capture d'un
+  raccourci est dans `ui/src/app/hotkey.ts`, et un test vérifie que ce qu'elle produit se relit.
+- `--headless` est le seul mode (encore accepté, sans effet). `QtWidgets` ne reste que pour
+  la fenêtre invisible qui reçoit les raccourcis, et le `QApplication` qu'elle impose.
+- **Avant de supprimer, ce que seul le Qt faisait encore a été porté** :
+  - le rappel en langage courant de la palette → `/rappel dans 20 min …` dans la barre
+    (`timers.parse`, `timers.set`) ;
+  - « Arrêter l'agent » → dans le `/` et sur la carte des sessions (`agent.stop`, existant) ;
+  - les mini-sorciers par session → une carte des sessions au-dessus de la barre ;
+  - le fichier déposé sur l'avatar → `capture.file` (existant, jamais envoyé jusque-là) ;
+  - Ctrl + glisser sur une fenêtre → `capture.window {x, y}`, pointeur capturé, sans halo ;
+  - taille, opacité, clics traversants et `ui.exclude_from_capture` → événement
+    `appearance`, appliqué par l'avatar et par toutes les fenêtres (DESIGN §10) ;
+  - au menu de l'icône : « Hooks Claude Code… » et « Recharger la configuration ».
+- README, DESIGN (§2, §10) et `config.default.toml` décrivent l'app telle qu'elle est.
+
+Vérifié : dans le terrain d'essai, la carte des sessions (« Arrêter » et × envoient les bonnes
+commandes), le rappel en langage courant en tête du `/`, l'avatar à 90 px pour une taille de
+1,25. **Dans l'app réelle** (sans rien afficher) : le core sans Qt démarre, l'avatar reçoit
+`appearance` (ton opacité de 0,96 appliquée), les services répondent, quitter arrête le core.
+**Non vérifié** : le Ctrl + glisser et le dépôt de fichier, qui demandent la vraie souris —
+à tester à la main.
 
 **Risques** : wheels `winrt-*` et `sounddevice` à vérifier pour cp313 (vérifiés
 aujourd'hui pour cp314 seulement) ; taille de l'exe (PySide6 + SDK) ; antivirus qui

@@ -51,27 +51,3 @@ def test_no_memory_leaves_the_prompt_alone():
     session._memory = ""
 
     assert session._system_prompt() == "Base."
-
-
-def test_the_settings_window_saves_the_memory(tmp_path, monkeypatch):
-    from wizard.config import DEFAULT_CONFIG_TEMPLATE, load_config
-    from wizard.ui_settings import SettingsWindow
-
-    target = tmp_path / "config.toml"
-    target.write_text(
-        DEFAULT_CONFIG_TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8"
-    )
-    memory_file = tmp_path / "memory.md"
-    monkeypatch.setattr("wizard.ui_settings.config_path", lambda: target)
-    monkeypatch.setattr(memory, "memory_path", lambda: memory_file)
-
-    window = SettingsWindow()
-    window.load(load_config(target))
-    assert not window.memory_changed()
-
-    window._memory_edit.setPlainText(memory.TEMPLATE + "Mon équipe s'appelle Koffi.\n")
-    assert window.memory_changed()
-    window._on_save()
-
-    assert "Koffi" in memory_file.read_text(encoding="utf-8")
-    window.deleteLater()

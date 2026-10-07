@@ -39,6 +39,8 @@ export interface SlashItem {
   key: string;
   label: string;
   run(): void;
+  /** Already about what was typed (a parsed reminder): first, never filtered. */
+  always?: boolean;
 }
 
 export interface BarProps {
@@ -46,6 +48,8 @@ export interface BarProps {
   /** "/" for the palette hotkey: the list open at once. */
   initialText?: string;
   extra?: SlashItem[];
+  /** What follows "/", as it is typed: for entries that depend on it. */
+  onQuery?(query: string): void;
   focus: boolean;
   onAsk(text: string): void;
   onAction(name: ActionName): void;
@@ -57,6 +61,7 @@ export function Bar({
   attachment,
   initialText = "",
   extra = [],
+  onQuery,
   focus,
   onAsk,
   onAction,
@@ -74,6 +79,11 @@ export function Bar({
   }, [focus, agent]);
 
   const slash = !agent && text.startsWith("/");
+  const query = slash ? text.slice(1) : null;
+  useEffect(() => {
+    if (query !== null) onQuery?.(query);
+  }, [query, onQuery]);
+
   const actions = useMemo(() => {
     if (!slash) return [];
     const items: SlashItem[] = [
@@ -84,7 +94,12 @@ export function Bar({
       })),
       ...extra,
     ];
-    return rank(text.slice(1), items, (item) => item.label);
+    const ranked = rank(
+      text.slice(1),
+      items.filter((item) => !item.always),
+      (item) => item.label,
+    );
+    return [...items.filter((item) => item.always), ...ranked];
   }, [slash, text, extra, onAction]);
 
   const submit = () => {
@@ -542,6 +557,83 @@ export function StepsCard({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// -- sessions ------------------------------------------------------------------
+
+/** What a session is doing, in French (sessions.py states). */
+export const SESSION_STATES: Record<string, string> = {
+  idle: "En attente",
+  thinking: "Réfléchit",
+  working: "Travaille",
+  waiting: "Attend votre réponse",
+  done: "Terminé",
+  error: "Erreur",
+};
+
+/**
+ * The Claude Code sessions the core sees (yours, through the hooks, and the
+ * agents it runs): what each is doing, one line each. The Qt avatar showed
+ * them as small figures around him; here they sit above the bar.
+ */
+export function SessionsCard({
+  sessions,
+  onStop,
+  onDismiss,
+}: {
+  sessions: CorePayloads["sessions.update"]["sessions"];
+  onStop(agentId: number): void;
+  onDismiss(sessionId: string): void;
+}) {
+  return (
+    <div
+      className="lw-surface lw-section"
+      style={{ width: 520, boxSizing: "border-box" }}
+    >
+      {/* Not .lw-list: its full-width buttons would crush the text. */}
+      <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+        {sessions.map((s) => (
+          <li key={s.id} className="lw-row" style={{ padding: "2px 0" }}>
+            <span className="lw-dot" style={{ background: s.colour, marginTop: 0 }} />
+            <span style={{ flex: "0 0 auto", fontWeight: "var(--lw-weight-medium)" }}>
+              {s.label}
+            </span>
+            <span className="lw-meta" style={{ flex: "0 0 auto" }}>
+              {SESSION_STATES[s.state] ?? s.state}
+            </span>
+            <span
+              className="lw-meta"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={s.last_action}
+            >
+              {s.last_action}
+            </span>
+            {s.agent_id !== undefined && s.running ? (
+              <button className="lw-chip" onClick={() => onStop(s.agent_id!)}>
+                Arrêter
+              </button>
+            ) : (
+              (s.state === "done" || s.state === "error") && (
+                <button
+                  className="lw-chip"
+                  aria-label={`Retirer ${s.label}`}
+                  onClick={() => onDismiss(s.id)}
+                >
+                  <X size={14} />
+                </button>
+              )
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

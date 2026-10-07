@@ -1,6 +1,6 @@
 # Configuration de Little Wizard.
 # Copié dans %APPDATA%\LittleWizard\config.toml au premier lancement. Modifiez-le
-# là-bas, puis choisissez « Recharger la configuration » dans le menu du sorcier :
+# là-bas, puis choisissez « Recharger la configuration » dans le menu de l'icône :
 # aucun redémarrage n'est nécessaire.
 #
 # Les noms de sections et de clés restent en anglais : ce sont des identifiants,
@@ -55,13 +55,11 @@ prewarm = true
 auto_approve_read_only = true
 
 [ui]
-# Cacher les panneaux de Little Wizard (réponses, palette, autorisations,
-# paramètres) des partages d'écran et des enregistrements : vous les voyez,
-# pas ceux qui regardent votre écran dans Teams, Zoom ou OBS.
-# Le sorcier lui-même et les flèches à l'écran ne peuvent PAS être cachés
-# ainsi (Windows le refuse sur les fenêtres transparentes) : ils restent
-# visibles dans vos partages. Ils sont en revanche toujours retirés des
-# captures que Little Wizard envoie à Claude, quel que soit ce réglage.
+# Cacher toutes les fenêtres de Little Wizard (le sorcier, le panneau, les
+# flèches à l'écran, la fenêtre des paramètres) des partages d'écran et des
+# enregistrements : vous les voyez, pas ceux qui regardent votre écran dans
+# Teams, Zoom ou OBS. Elles sont de toute façon retirées des captures que
+# Little Wizard envoie à Claude, quel que soit ce réglage.
 exclude_from_capture = true
 # Durée d'affichage d'une flèche ou d'une zone mise en évidence, en secondes.
 overlay_seconds = 12.0
