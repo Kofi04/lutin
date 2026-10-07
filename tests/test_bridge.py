@@ -296,3 +296,37 @@ def test_foreign_hooks_are_never_stale(tmp_path):
     path.write_text(json.dumps(foreign()), encoding="utf-8")
 
     assert installer.is_stale(path) is False
+
+
+# -- the installed app (frozen by PyInstaller) -------------------------------
+
+
+@pytest.fixture
+def frozen(tmp_path, monkeypatch):
+    """sys as PyInstaller leaves it: <app>/core/wizard-core.exe."""
+    core = tmp_path / "app" / "core" / "wizard-core.exe"
+    monkeypatch.setattr(installer.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(installer.sys, "executable", str(core))
+    return tmp_path / "app"
+
+
+def test_installed_hooks_run_the_hook_exe_with_the_event_only(frozen):
+    hooks = installer.build_hooks()
+    hook = hooks["PreToolUse"][0]["hooks"][0]
+
+    assert hook["command"] == str(frozen / "hook" / installer.HOOK_EXE_NAME)
+    assert hook["args"] == ["PreToolUse"]
+
+
+def test_hook_exe_entries_are_ours_and_stale_once_uninstalled(frozen, tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"hooks": installer.build_hooks()}), encoding="utf-8")
+    assert installer.is_installed(path) is True
+    # The app removed: the exe the entries point at is gone.
+    assert installer.is_stale(path) is True
+
+    exe = frozen / "hook" / installer.HOOK_EXE_NAME
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"MZ")
+    assert installer.is_stale(path) is False
+    assert "hooks" not in installer.remove_hooks(json.loads(path.read_text("utf-8")))

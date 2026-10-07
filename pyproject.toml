@@ -7,11 +7,10 @@ name = "little-wizard"
 version = "0.2.0"
 description = "Un petit sorcier de bureau pose sur la barre des taches Windows"
 requires-python = ">=3.11"
-# PySide6 is the only hard GUI dependency, and claude-agent-sdk the only way to
-# drive Claude Code from Python. Pygments is small, pure Python and already in
-# the tree (claude-agent-sdk pulls it); the alternative is hand-writing a
-# QSyntaxHighlighter per language, which is reinventing it badly.
-dependencies = ["PySide6>=6.7", "claude-agent-sdk==0.2.161", "pygments>=2.17"]
+# PySide6 for the event loop, the screens, the hotkeys' window and the local
+# sockets (the core shows no window: the UI is Tauri, in ui/), and
+# claude-agent-sdk, the only way to drive Claude Code from Python.
+dependencies = ["PySide6>=6.7", "claude-agent-sdk==0.2.161"]
 
 [project.optional-dependencies]
 # Every extra must be optional in the real sense: the app starts without it and
@@ -41,6 +40,8 @@ ocr = [
     "winrt-Windows.Storage.Streams>=3.2",
 ]
 dev = ["pytest>=8", "ruff>=0.6"]
+# Freezing the core and the hook for the installer (packaging/build.py).
+build = ["pyinstaller>=6.22"]
 
 [project.gui-scripts]
 wizard = "wizard.app:main"

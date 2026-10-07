@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau) · M6 ✅ (curseur guide) · M6 bis ✅ (fenêtre app) · M7a ✅ (Qt visible retiré) · M7b à faire (packaging) — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau) · M6 ✅ (curseur guide) · M6 bis ✅ (fenêtre app) · M7a ✅ (Qt visible retiré) · M7b ✅ (installeur) — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -899,6 +899,14 @@ tests de ces widgets. `--headless` devient le seul mode.
 réextrait à chaque lancement) sous **Python 3.13** dans un venv dédié, déclaré en
 `externalBin` dans Tauri ; installeur Tauri (NSIS ou MSI).
 
+> **Révisé en M7b.** Python 3.14, pas 3.13 : PyInstaller 6.22 le prend en charge
+> désormais, et les wheels `winrt-*` / `sounddevice` étaient déjà vérifiées pour cp314 ;
+> le venv du projet avec un extra `[build]` plutôt qu'un venv dédié (PyInstaller n'embarque
+> que ce que le core importe). Les dossiers `--onedir` en **ressources** Tauri, pas en
+> `externalBin`, qui n'accepte qu'un fichier seul (donc `--onefile`). Et un **second exe**
+> pour le hook : sans lui, l'app installée n'a pas de Python pour lancer `wizard_hook.py`, et
+> lancer le core figé à chaque appel d'outil chargerait PySide6 pour rien.
+
 **Vérification** : `pytest` vert après suppression ; `git grep QtWidgets` ne trouve
 plus que la fenêtre propriétaire des raccourcis ; installer sur une session Windows
 propre, lancer, capturer, poser une question, tuer le core et le voir revenir ;
@@ -933,6 +941,25 @@ commandes), le rappel en langage courant en tête du `/`, l'avatar à 90 px pour
 `appearance` (ton opacité de 0,96 appliquée), les services répondent, quitter arrête le core.
 **Non vérifié** : le Ctrl + glisser et le dépôt de fichier, qui demandent la vraie souris —
 à tester à la main.
+
+**Fait (M7b — l'installeur)** — Tests : 624 Python, 247 Vitest, 5 Rust.
+
+- `packaging/build.py` : le core et le hook gelés par PyInstaller (`--onedir`), puis
+  `tauri build` → `Little Wizard_0.2.0_x64-setup.exe`, **51 Mo**, NSIS, par utilisateur.
+- Le superviseur lance `core/wizard-core.exe` en release, le `.venv` en debug, `WIZARD_CORE`
+  sinon. L'installeur des hooks écrit `hook/wizard-hook.exe <événement>` depuis l'app
+  installée, les reconnaît comme siens, et les dit cassés si l'exe a disparu.
+- Code mort laissé par M7a retiré : `markdown_blocks.py` (et Pygments des dépendances).
+
+Vérifié : le core gelé seul (prêt en 3,9 s, un service répond, sortie 0,3 s après la
+fermeture de stdin, stderr vide) ; le hook gelé (sortie 0 sans rien écrire sans le core, en
+~0,6 s comme le script ; 150–170 ms avec le core, qui voit la session) ; **l'app release**
+lancée depuis son dossier de build, donc par le même chemin que l'app installée : pages
+servies par `tauri.localhost`, core gelé lancé depuis `core/`, services qui répondent sur
+tes données, core arrêté avec l'app.
+Non vérifié : l'installeur lui-même n'a pas été exécuté (il crée raccourcis et entrée de
+désinstallation sur la machine) — à faire à la main, idéalement sur une session propre.
+Mesure à retenir : l'animation « Claude travaille » coûte ~25 % d'un cœur à WebView2.
 
 **Risques** : wheels `winrt-*` et `sounddevice` à vérifier pour cp313 (vérifiés
 aujourd'hui pour cp314 seulement) ; taille de l'exe (PySide6 + SDK) ; antivirus qui

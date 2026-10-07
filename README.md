@@ -469,18 +469,38 @@ without a screen; DESIGN.md section 4 describes every state.
 ## Packaging
 
 ```powershell
-.venv\Scripts\pyinstaller.exe --noconsole --onefile --name Wizard ^
-  --icon src\wizard\app.ico ^
-  --add-data "src\wizard\config.default.toml;wizard" ^
-  --add-data "src\wizard\app.ico;wizard" ^
-  --paths src ^
-  src\wizard\__main__.py
+.venv\Scripts\python.exe -m pip install -e ".[build]"   # PyInstaller
+.venv\Scripts\python.exe packaging\build.py
 ```
 
-`--icon` sets the icon baked into the .exe; the second `--add-data` ships the
-same file inside the bundle so `app_icon()` still finds it at runtime for the
-dialogs. Point `scripts\shortcut.ps1` at `dist\Wizard.exe` afterwards, or
-just make a shortcut to it by hand — a packaged build needs no virtualenv.
+That produces `ui\src-tauri\target\release\bundle\nsis\Little Wizard_<version>_x64-setup.exe`
+(about 51 MB), an installer for the current user that needs no Python, Node or
+Rust on the machine — only Claude Code itself, for the Claude features.
+
+- **The core is frozen with PyInstaller `--onedir`** (`packaging/dist/wizard-core`,
+  about 150 MB unpacked), not `--onefile`, which unpacks itself to a temporary
+  folder on every start: slower, and what antivirus software flags. It is a
+  console exe started with `CREATE_NO_WINDOW`, so its standard streams always
+  work and no window ever shows.
+- **The hook is frozen on its own** (`wizard-hook.exe`, 21 MB): the installed
+  app has no Python to run `wizard_hook.py` with, and starting the core's exe on
+  every tool call would load PySide6 for nothing. Installing the hooks from the
+  packaged app writes `wizard-hook.exe <event>`; uninstalling the app leaves
+  those entries pointing at nothing, which the app reports as stale — remove
+  the hooks (*Hooks Claude Code…*) before uninstalling.
+- **Tauri ships both folders as resources** (`core/`, `hook/`) rather than as
+  `externalBin`, which takes a single file only. The shell starts
+  `core/wizard-core.exe` in a release build and the repository's `.venv` in a
+  debug one; `WIZARD_CORE` overrides either.
+- **The Rust release build is long here**: 28 minutes, one job at a time
+  (`CARGO_BUILD_JOBS=1`, which `build.py` sets) because compiling the `tauri`
+  crate in parallel runs out of memory on a 4 GB machine.
+- `packaging\build.py --python` builds the two exes only, to test them.
+
+Measured: the frozen core is ready 3.9 s after it starts and exits 0.3 s after
+its stdin closes. The frozen hook takes 150–170 ms per event with the app
+running (as the script under `pythonw.exe` did), and about 0.6 s when the app is
+closed, almost all of it the hook's 0.4 s connection timeout.
 
 ## Architecture
 
@@ -684,22 +704,19 @@ barre* to forget it).
 - Windows only. The modules import cleanly elsewhere (the Win32 calls degrade to
   neutral values) so the tests run anywhere, but the app itself does not.
 - Reminders live in memory: they do not survive a restart, by design.
-- Clipboard history is text only — images and files are ignored.
+- Clipboard history keeps text and images; copied files are ignored.
 - The avatar is always-on-top, so it can cover a corner of a window underneath.
   Drag it somewhere else, or hide it with `Ctrl+Alt+A`.
-- **Packaging does not currently work on this machine.** PyInstaller has no
-  wheel for Python 3.14, so the command in *Packaging* above cannot run until
-  either PyInstaller ships one or you build the app on 3.12/3.13. The command
-  itself is correct; it is the tool that is missing.
+- **The installer is not signed.** Windows SmartScreen warns on first run,
+  and some antivirus software distrusts unsigned PyInstaller executables.
 - There is no CI. The tests and the linter are run by hand.
-- **Idle CPU is about 1 % of one core for the app's own process**, measured
-  over 30 s windows after startup, and noisier on a loaded machine (one run at
-  3 %). Most of it is redrawing the avatar; frames that would look the same on
-  screen are skipped, and the complete figure is cached so a breathing frame is
-  a single blit. **The Claude Code process kept warm by `claude.prewarm` adds
-  about 2.2–2.5 % on its own** (measured in phase M2, two 100 s windows): that
-  process had not been counted before. `claude.prewarm = false` removes it, at
-  the cost of a slower first answer.
+- **Idle CPU is under 1 % of one core for the whole app** once the avatar
+  has settled (phase M6: 0.76 %, the warm Claude Code process included).
+  `claude.prewarm = false` removes that process, at the cost of a slower first
+  answer. **While a Claude session works, the avatar animates and WebView2
+  then costs about 25 % of one core** (measured in phase M7, a hooked session
+  working): every frame of a transparent always-on-top window is recomposed in
+  full. Not optimised yet.
 - Quitting within the first seconds, while the Claude connection is still
   being made, takes about 4 seconds: starting the Claude Code process cannot be
   cancelled instantly. Nothing is left running afterwards (checked).

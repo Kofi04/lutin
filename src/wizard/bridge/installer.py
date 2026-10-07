@@ -22,6 +22,11 @@ from pathlib import Path
 #: line mentions this, and nothing else.
 HOOK_SCRIPT_NAME = "wizard_hook.py"
 
+#: The same script, frozen on its own by PyInstaller for the installed app,
+#: which has no Python to run a .py with. Standard library only: it starts
+#: without loading anything of the core (PySide6, the SDK).
+HOOK_EXE_NAME = "wizard-hook.exe"
+
 #: Names we have used in the past. A machine that installed the hooks when the
 #: app was called "Lutin" has `lutin_hook.py` in its settings.json, and that
 #: entry now points at a script that no longer exists: every tool call would
@@ -31,7 +36,7 @@ HOOK_SCRIPT_NAME = "wizard_hook.py"
 LEGACY_HOOK_SCRIPT_NAMES = ("lutin_hook.py",)
 
 #: Every marker that means "this entry belongs to us".
-OWNED_SCRIPT_NAMES = (HOOK_SCRIPT_NAME, *LEGACY_HOOK_SCRIPT_NAMES)
+OWNED_SCRIPT_NAMES = (HOOK_SCRIPT_NAME, HOOK_EXE_NAME, *LEGACY_HOOK_SCRIPT_NAMES)
 
 #: Fired in the background: they can never block or delay a session.
 OBSERVED_EVENTS = (
@@ -65,16 +70,27 @@ def settings_path() -> Path:
     return Path.home() / ".claude" / "settings.json"
 
 
-def hook_script_path() -> Path:
-    """Where wizard_hook.py lives, whether running from source or frozen."""
-    if getattr(sys, "frozen", False):  # PyInstaller
-        return Path(sys.executable).parent / "hooks" / HOOK_SCRIPT_NAME
+def _frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))  # PyInstaller
+
+
+def hook_script_path() -> Path | None:
+    """Where wizard_hook.py lives; None in the installed app (it is an .exe)."""
+    if _frozen():
+        return None
     return Path(__file__).resolve().parents[3] / "hooks" / HOOK_SCRIPT_NAME
 
 
 def launcher_path() -> Path:
-    """A real .exe: Windows exec-form hooks cannot spawn .cmd or .bat shims."""
+    """A real .exe: Windows exec-form hooks cannot spawn .cmd or .bat shims.
+
+    From source, the venv's pythonw.exe runs the script. Installed, the hook
+    is its own exe, next to the core's folder: <app>/hook/wizard-hook.exe
+    beside <app>/core/wizard-core.exe (the Tauri bundle's resources).
+    """
     executable = Path(sys.executable)
+    if _frozen():
+        return executable.parent.parent / "hook" / HOOK_EXE_NAME
     windowed = executable.with_name("pythonw.exe")
     return windowed if windowed.exists() else executable
 
@@ -100,7 +116,8 @@ def _entry(event: str, launcher: str, script: str, blocking: bool) -> dict:
     hook: dict = {
         "type": "command",
         "command": launcher,
-        "args": [script, event],
+        # No script for the frozen hook: the exe is the script.
+        "args": [script, event] if script else [event],
     }
     if blocking:
         hook["timeout"] = DECISION_TIMEOUT_S
@@ -117,7 +134,9 @@ def _entry(event: str, launcher: str, script: str, blocking: bool) -> dict:
 def build_hooks(launcher: str | None = None, script: str | None = None) -> dict:
     """The `hooks` block Little Wizard wants, keyed by event name."""
     launcher = launcher or str(launcher_path())
-    script = script or str(hook_script_path())
+    if script is None:
+        default = hook_script_path()
+        script = str(default) if default is not None else ""
 
     hooks = {
         event: [_entry(event, launcher, script, blocking=False)]
@@ -253,7 +272,8 @@ def is_stale(path: Path | None = None) -> bool:
     """True when our hooks are installed but point somewhere that no longer works.
 
     Two ways that happens: the entry was written under the app's old name, or
-    the project folder moved and the recorded script path is gone. Either way
+    the project folder moved (or the app was uninstalled) and the recorded
+    script or exe is gone. Either way
     Claude Code would spawn a process that dies on every tool call. The caller
     needs to know, because the fix is to *re-install* (which replaces the
     entries) and a menu that only offers "uninstall" leaves the user stuck.
@@ -278,6 +298,9 @@ def is_stale(path: Path | None = None) -> bool:
                     (arg for arg in args if arg.endswith(HOOK_SCRIPT_NAME)), ""
                 )
                 if script and not Path(script).exists():
+                    return True
+                command = str(hook.get("command", ""))
+                if command.endswith(HOOK_EXE_NAME) and not Path(command).exists():
                     return True
     return False
 

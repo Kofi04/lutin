@@ -84,13 +84,16 @@ fn new_token() -> String {
 
 /// The command that starts the core.
 ///
-/// `WIZARD_CORE` overrides it (a path to python.exe, or to the packaged core
-/// from phase M7). Otherwise, the repository's virtualenv: this file sits in
-/// <repo>/ui/src-tauri, so the venv is two levels up.
-fn core_command() -> Command {
-    let mut command = match std::env::var_os("WIZARD_CORE") {
-        Some(program) => Command::new(program),
-        None => {
+/// - `WIZARD_CORE`, if set: a python.exe (run with `-m wizard`) or the frozen
+///   `wizard-core.exe`.
+/// - Installed (release build): the frozen core the installer put in the
+///   app's resources, `core/wizard-core.exe` (packaging/build.py).
+/// - From source (debug build): the repository's virtualenv; this file sits
+///   in <repo>/ui/src-tauri, so the venv is two levels up.
+fn core_command(app: &AppHandle) -> Command {
+    let program = match std::env::var_os("WIZARD_CORE") {
+        Some(program) => std::path::PathBuf::from(program),
+        None if cfg!(debug_assertions) => {
             // Parents, not "..": the venv's python.exe compares its own path
             // with the venv's and warns when they differ only by a "..".
             let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -98,10 +101,25 @@ fn core_command() -> Command {
                 .parent()
                 .and_then(|ui| ui.parent())
                 .unwrap_or(manifest);
-            Command::new(repo.join(".venv").join("Scripts").join("python.exe"))
+            repo.join(".venv").join("Scripts").join("python.exe")
         }
+        None => app
+            .path()
+            .resource_dir()
+            .map(|dir| dir.join("core").join("wizard-core.exe"))
+            .unwrap_or_else(|_| "wizard-core.exe".into()),
     };
-    command.args(["-m", "wizard", "--headless", "--exit-on-stdin-close"]);
+    let is_python = program
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .is_some_and(|stem| {
+            stem.eq_ignore_ascii_case("python") || stem.eq_ignore_ascii_case("pythonw")
+        });
+    let mut command = Command::new(&program);
+    if is_python {
+        command.args(["-m", "wizard"]);
+    }
+    command.args(["--headless", "--exit-on-stdin-close"]);
     command
 }
 
@@ -113,7 +131,7 @@ pub fn start(app: AppHandle) {
 }
 
 fn spawn_core(app: AppHandle, token: String, inner: Arc<Mutex<Inner>>) {
-    let mut command = core_command();
+    let mut command = core_command(&app);
     command
         .env("WIZARD_UI_TOKEN", &token)
         .env("PYTHONUNBUFFERED", "1")
