@@ -73,6 +73,7 @@ export class CoreClient {
   private anyHandlers = new Set<(message: CoreMessage) => void>();
   private statusHandlers = new Set<(status: Status) => void>();
   private hiddenForCloak = false;
+  private requests = 0;
 
   constructor(
     private readonly role: Role,
@@ -131,6 +132,34 @@ export class CoreClient {
     }
     this.socket.send(encode(type, payload, id));
     return true;
+  }
+
+  /**
+   * Ask the core something (rpc.py) and wait for its answer. Rejects with
+   * the core's French message on a refusal, or if no answer comes in time.
+   */
+  request<T = Record<string, unknown>>(
+    method: string,
+    params: Record<string, unknown> = {},
+    timeoutMs = 10_000,
+  ): Promise<T> {
+    const id = `q${++this.requests}`;
+    if (!this.send("request", { method, params }, id)) {
+      return Promise.reject(new Error("Le cœur n'est pas connecté."));
+    }
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        stop();
+        reject(new Error("Le cœur n'a pas répondu à temps."));
+      }, timeoutMs);
+      const stop = this.on("reply", (payload, message) => {
+        if (message.id !== id) return;
+        clearTimeout(timer);
+        stop();
+        if (payload.ok) resolve((payload.data ?? {}) as T);
+        else reject(new Error(payload.message ?? payload.error ?? "Refusé par le cœur."));
+      });
+    });
   }
 
   // -- connection ---------------------------------------------------------

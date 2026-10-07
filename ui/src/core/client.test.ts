@@ -188,3 +188,56 @@ describe("the cloak", () => {
     expect(host.calls).toEqual(["hide"]);
   });
 });
+
+describe("requests", () => {
+  it("resolve with the data of the reply that carries their id", async () => {
+    const socket = await online();
+    const answer = client.request("notes.list", { limit: 5 });
+    const sent = socket.sent.at(-1) as unknown as { id: string; payload: object };
+    expect(sent).toMatchObject({
+      type: "request",
+      payload: { method: "notes.list", params: { limit: 5 } },
+    });
+    // Another reply first: not ours.
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "reply",
+        id: "other",
+        payload: { ok: true, data: { x: 1 } },
+      }),
+    });
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "reply",
+        id: sent.id,
+        payload: { ok: true, data: { items: [] } },
+      }),
+    });
+    await expect(answer).resolves.toEqual({ items: [] });
+  });
+
+  it("reject with the core's message on a refusal", async () => {
+    const socket = await online();
+    const answer = client.request("settings.write", {});
+    const sent = socket.sent.at(-1) as unknown as { id: string };
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "reply",
+        id: sent.id,
+        payload: { ok: false, error: "invalid", message: "Raccourci déjà pris" },
+      }),
+    });
+    await expect(answer).rejects.toThrow("Raccourci déjà pris");
+  });
+
+  it("reject when nothing answers in time", async () => {
+    await online();
+    const answer = client.request("slow", {}, 1000);
+    vi.advanceTimersByTime(1000);
+    await expect(answer).rejects.toThrow("à temps");
+  });
+
+  it("reject at once when not connected", async () => {
+    await expect(client.request("notes.list")).rejects.toThrow("pas connecté");
+  });
+});

@@ -22,7 +22,7 @@ from collections import deque
 from PySide6.QtCore import QObject, QSharedMemory, Qt, Signal
 from PySide6.QtWidgets import QApplication
 
-from . import winapi
+from . import services, winapi
 from .assistant import memory as user_memory
 from .assistant import ocr
 from .assistant import selection as selection_actions
@@ -57,6 +57,7 @@ from .hotkeys import GlobalHotkeys
 from .mood import Mood, claude_mood_for, combine
 from .paths import migrate_legacy_data
 from .presenter import Presenter
+from .rpc import Rpc
 from .sessions import EVENT_STATES, SessionRegistry, describe
 from .storage import Storage
 from .tray import app_icon
@@ -110,6 +111,8 @@ class AvatarApp:
 
             presenter = QtPresenter()
         self.ui = presenter
+        #: What the Tauri UI may ask of the core (rpc.py, services.py).
+        self.rpc = Rpc()
         self._escape_id: int | None = None
 
         self.storage = Storage(database_path())
@@ -133,6 +136,7 @@ class AvatarApp:
             hold=self.clipboard.hold, release=self.clipboard.release
         )
         self._selection_source = 0
+        services.register(self.rpc, self)
 
         self.capture = CaptureController(cloak=self.ui.make_cloak())
 
@@ -701,14 +705,17 @@ class AvatarApp:
         )
         if not self.ui.confirm_hooks(plan, installing):
             return
-        if not plan.changed:
-            return
+        self._apply_hooks(plan)
 
+    def _apply_hooks(self, plan) -> bool:
+        """Write a plan the user has seen and accepted. False if it failed."""
+        if not plan.changed:
+            return True
         try:
             saved = hooks_installer.apply(plan)
         except OSError as exc:
             self.notify("Hooks", f"Écriture impossible : {exc}", kind="warning")
-            return
+            return False
 
         installed = hooks_installer.is_installed()
         self.ui.set_flags(hooks_installed=installed)
@@ -718,6 +725,7 @@ class AvatarApp:
         )
         if not installed:
             self.sessions.clear()
+        return True
 
     def _open_quick_note(self) -> None:
         self.ui.open_window("quick_note")

@@ -80,6 +80,7 @@ export interface SelectionChoice {
 export interface UiPayloads {
   hello: { token: string; protocol: number; role: Role; pid?: number };
   ping: Record<string, never>;
+  request: { method: string; params?: Record<string, unknown> };
   ask: { text: string; capture_id?: string };
   "ask.cancel": Record<string, never>;
   "approval.answer": { request_id: string; decision: Decision };
@@ -110,7 +111,12 @@ export interface UiPayloads {
 /** What the core sends. */
 export interface CorePayloads {
   "hello.ok": { protocol: number; version: string; pid: number };
-  reply: { ok: boolean; data?: Record<string, unknown> };
+  reply: {
+    ok: boolean;
+    data?: Record<string, unknown>;
+    error?: string;
+    message?: string;
+  };
   error: { error: string; message: string };
   mood: { mood: Mood };
   connection: { state: string; detail: string };
@@ -188,6 +194,7 @@ void sameTypes;
 const UI_TYPES = Object.keys({
   hello: 1,
   ping: 1,
+  request: 1,
   ask: 1,
   "ask.cancel": 1,
   "approval.answer": 1,

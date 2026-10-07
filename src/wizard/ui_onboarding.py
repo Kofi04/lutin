@@ -11,9 +11,7 @@ machine, so it never promises something that is not true.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from PySide6.QtCore import QSettings, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
@@ -30,60 +28,15 @@ from .character.animation import still_frame
 from .character.emote import Emote
 from .character.renderer import load_renderer
 from .config import Hotkeys
-from .paths import state_path
+from .onboarding import (  # noqa: F401  (re-exported)
+    Check,
+    already_shown,
+    mark_shown,
+    pretty,
+    shortcut_rows,
+)
 
-_DONE_KEY = "onboarding/done"
 _PORTRAIT = 132
-
-
-@dataclass(frozen=True)
-class Check:
-    """One line of "is this set up?"."""
-
-    label: str
-    ok: bool
-    detail: str
-    #: Text for a button that fixes it, or "" when there is nothing to do.
-    action: str = ""
-
-
-def already_shown(settings: QSettings | None = None) -> bool:
-    store = settings or QSettings(str(state_path()), QSettings.Format.IniFormat)
-    return bool(store.value(_DONE_KEY, False, type=bool))
-
-
-def mark_shown(settings: QSettings | None = None) -> None:
-    store = settings or QSettings(str(state_path()), QSettings.Format.IniFormat)
-    store.setValue(_DONE_KEY, True)
-    store.sync()
-
-
-def shortcut_rows(hotkeys: Hotkeys) -> list[tuple[str, str]]:
-    """The shortcuts worth learning on day one, in the order you would use them."""
-    rows = [
-        ("Demander à Claude", hotkeys.ask_claude),
-        ("Montrer une zone de l'écran", hotkeys.capture_region),
-        ("Palette de commandes", hotkeys.launcher),
-        ("Note rapide", hotkeys.quick_note),
-        ("Presse-papiers", hotkeys.clipboard),
-    ]
-    return [(label, spec) for label, spec in rows if spec]
-
-
-def pretty(spec: str) -> str:
-    """ctrl+alt+N -> Ctrl + Alt + N, the way people write shortcuts."""
-    names = {"ctrl": "Ctrl", "alt": "Alt", "shift": "Maj", "win": "Win"}
-    rendered = []
-    for part in (piece.strip() for piece in spec.split("+")):
-        if not part:
-            continue
-        if part.lower() in names:
-            rendered.append(names[part.lower()])
-        elif len(part) == 1:
-            rendered.append(part.upper())
-        else:
-            rendered.append(part.capitalize())
-    return " + ".join(rendered)
 
 
 class OnboardingDialog(QDialog):

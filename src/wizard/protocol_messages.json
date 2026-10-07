@@ -17,6 +17,11 @@
       "doc": "A request: the core answers with reply, carrying the same id.",
       "payload": {}
     },
+    "request": {
+      "from": "ui",
+      "doc": "Ask the core for data or to change something, by method name (rpc.py lists them). It must carry an id; the core answers with reply, carrying the same id.",
+      "payload": { "method": "string", "params": "object?" }
+    },
     "ask": {
       "from": "ui",
       "doc": "A question typed in the panel, with the capture confirmed for it, if any.",
@@ -89,7 +94,12 @@
     "reply": {
       "from": "core",
       "doc": "The answer to a request, with the request's id.",
-      "payload": { "ok": "boolean", "data": "object?" }
+      "payload": {
+        "ok": "boolean",
+        "data": "object?",
+        "error": "string?",
+        "message": "string?"
+      }
     },
     "error": {
       "from": "core",

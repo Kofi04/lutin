@@ -30,6 +30,7 @@ from .assistant import selection as selection_actions
 from .capture.cloak import RemoteCloak
 from .overlay.scene import Highlight, Pointer
 from .presenter import WINDOWS, Presenter
+from .rpc import RpcError
 from .ws_server import UiServer
 
 log = logging.getLogger(__name__)
@@ -189,6 +190,9 @@ class ProtocolPresenter(Presenter):
     # -- incoming ---------------------------------------------------------
 
     def _on_message(self, client, message) -> None:
+        if message.type == "request":
+            self._on_request(client, message)
+            return
         handler = self._handlers.get(message.type)
         if handler is None:
             return
@@ -202,6 +206,25 @@ class ProtocolPresenter(Presenter):
                 {"error": "command_failed", "message": f"{message.type}: {exc}"},
                 message.id,
             )
+
+    def _on_request(self, client, message) -> None:
+        """A window asks something of the core (rpc.py): always answered."""
+        if message.id is None:
+            self.server.send(
+                client,
+                "error",
+                {"error": "missing_id", "message": "a request needs an id"},
+            )
+            return
+        try:
+            data = self.app.rpc.call(
+                message.payload["method"], message.payload.get("params")
+            )
+        except RpcError as exc:
+            reply = {"ok": False, "error": exc.code, "message": exc.message}
+        else:
+            reply = {"ok": True, "data": data}
+        self.server.send(client, "reply", reply, message.id)
 
     def _send_state(self, client) -> None:
         send = self.server.send

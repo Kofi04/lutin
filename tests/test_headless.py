@@ -393,3 +393,29 @@ def test_a_window_is_told_the_real_claude_state_not_a_guess(core):
     client = core.test_connect()
     connection = client.wait_for("connection")
     assert connection.payload["state"] == core.claude.state == "offline"
+
+
+# -- requests (rpc.py) ---------------------------------------------------------
+
+
+def test_a_request_is_answered_with_its_id(core):
+    core.rpc.register("test.echo", lambda params: {"echo": params["text"]})
+    client = core.test_connect("settings")
+    client.send("request", {"method": "test.echo", "params": {"text": "été"}}, id="q1")
+    reply = client.wait_for("reply")
+    assert reply.id == "q1"
+    assert reply.payload == {"ok": True, "data": {"echo": "été"}}
+
+
+def test_an_unknown_method_is_refused(core):
+    client = core.test_connect("settings")
+    client.send("request", {"method": "shell.run", "params": {}}, id="q2")
+    reply = client.wait_for("reply")
+    assert reply.payload["ok"] is False
+    assert reply.payload["error"] == "unknown_method"
+
+
+def test_a_request_without_an_id_cannot_be_answered(core):
+    client = core.test_connect("settings")
+    client.send("request", {"method": "test.echo"})
+    assert client.wait_for("error").payload["error"] == "missing_id"

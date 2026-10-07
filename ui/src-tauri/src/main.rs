@@ -18,6 +18,7 @@ fn main() {
             windows::panel_place,
             windows::panel_show,
             windows::window_visible,
+            windows::app_window,
             windows::avatar_anchor,
             cursor::cursor_listen,
             cursor::cursor_now,

@@ -13,6 +13,20 @@ use crate::protect;
 
 pub const AVATAR: &str = "avatar";
 pub const PANEL: &str = "panel";
+/// The ordinary window: settings, history, notes... (DESIGN.md section 2).
+pub const APP: &str = "app";
+
+/// The views the app window can show; anything else is refused.
+const APP_VIEWS: [&str; 8] = [
+    "settings",
+    "history",
+    "clipboard",
+    "notes",
+    "reminders",
+    "hooks",
+    "onboarding",
+    "agent",
+];
 pub const OVERLAY_PREFIX: &str = "overlay-";
 
 /// DESIGN.md section 4: a 56 px figure in a 72 px window.
@@ -169,6 +183,33 @@ pub fn set_visible(window: &WebviewWindow, visible: bool, focus: bool) -> tauri:
     }
 }
 
+/// Open the app window on `view`, or bring it forward and switch to it.
+///
+/// An ordinary window, framed and resizable, unlike the floating ones: it is
+/// where you go to read or change things, so it takes the focus.
+pub fn open_app_window(app: &AppHandle, view: &str) -> tauri::Result<()> {
+    if !APP_VIEWS.contains(&view) {
+        return Ok(());
+    }
+    if let Some(window) = app.get_webview_window(APP) {
+        let _ = app.emit_to(APP, "app://view", view);
+        if window.is_minimized().unwrap_or(false) {
+            window.unminimize()?;
+        }
+        return set_visible(&window, true, true);
+    }
+    let window =
+        WebviewWindowBuilder::new(app, APP, WebviewUrl::App(format!("app.html#{view}").into()))
+            .title("Little Wizard")
+            .inner_size(860.0, 620.0)
+            .min_inner_size(560.0, 420.0)
+            .resizable(true)
+            .visible(false)
+            .build()?;
+    protect::apply(&window);
+    set_visible(&window, true, true)
+}
+
 /// Make the overlays match the monitors: one each, covering it exactly.
 ///
 /// Tauri has no "monitors changed" event, so this runs at startup and again
@@ -263,6 +304,11 @@ pub fn avatar_anchor(app: AppHandle) -> Option<crate::cursor::Cursor> {
         x: at.x + (57.0 * scale).round() as i32,
         y: at.y + (23.0 * scale).round() as i32,
     })
+}
+
+#[tauri::command]
+pub fn app_window(app: AppHandle, view: String) -> Result<(), String> {
+    open_app_window(&app, &view).map_err(|e| e.to_string())
 }
 
 /// For the pages: show or hide the window that asks (WindowEnv, the cloak).
