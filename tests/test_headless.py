@@ -338,7 +338,7 @@ def test_guide_activity_claims_and_releases_escape(core):
     assert spin_until(lambda: core.test_escapes == [True, False])
 
 
-def test_windows_not_ported_yet_are_requested_from_the_ui(core):
+def test_windows_are_requested_from_the_ui(core):
     client = core.test_connect()
     core._open_settings()
     assert client.wait_for("window.open").payload == {"name": "settings"}
@@ -354,6 +354,19 @@ def test_hooks_are_never_written_without_the_diff_window(core, monkeypatch):
 
     assert client.wait_for("window.open").payload == {"name": "hooks.install"}
     assert written == []
+
+
+def test_the_welcome_waits_for_a_window_then_stops_once_dismissed(core):
+    from wizard.onboarding import mark_shown
+
+    core.ui.show_onboarding()  # at startup, before any window connected
+    first = core.test_connect()
+    assert first.wait_for("window.open").payload == {"name": "onboarding"}
+
+    mark_shown()
+    later = core.test_connect()
+    later.wait_for("sessions.update")
+    assert later.of_type("window.open") == []
 
 
 # -- the launcher going away ---------------------------------------------------
@@ -419,3 +432,27 @@ def test_a_request_without_an_id_cannot_be_answered(core):
     client = core.test_connect("settings")
     client.send("request", {"method": "test.echo"})
     assert client.wait_for("error").payload["error"] == "missing_id"
+
+
+def test_the_app_window_services_run_on_the_real_app(core):
+    """The services, wired to a real AvatarApp: what the app window gets."""
+    client = core.test_connect("app")
+
+    def ask(method, params=None, id="q"):
+        client.send("request", {"method": method, "params": params or {}}, id=id)
+        return client.wait_for("reply", count=len(client.of_type("reply")) + 1).payload
+
+    fields = ask("settings.read", id="a")["data"]["fields"]
+    assert {"section": "claude", "key": "enabled"}.items() <= next(
+        f for f in fields if f["key"] == "enabled" and f["section"] == "claude"
+    ).items()
+
+    assert ask("notes.add", {"body": "pain"}, id="b")["ok"]
+    assert ask("notes.list", id="c")["data"]["items"][0]["body"] == "pain"
+
+    added = ask("timers.add", {"duration": "25"}, id="d")["data"]
+    assert ask("timers.list", id="e")["data"]["items"][0]["id"] == added["id"]
+    ask("timers.cancel_all", id="f")
+
+    refused = ask("settings.write", {"values": {"appearance.scale": 99}}, id="g")
+    assert refused["ok"] is False and refused["error"] == "invalid"

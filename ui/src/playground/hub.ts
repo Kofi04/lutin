@@ -52,15 +52,22 @@ class FakeSocket implements SocketLike {
       return;
     }
     this.hub.record(this.role, message);
+    if (message.type === "request") {
+      const { method, params = {} } = message.payload;
+      // Answered later, like a real round trip.
+      queueMicrotask(() =>
+        this.receive("reply", this.hub.answer(method, params), message.id),
+      );
+    }
   }
 
   close(): void {
     this.drop();
   }
 
-  receive(type: string, payload: object): void {
+  receive(type: string, payload: object, id?: string): void {
     if (this.readyState !== OPEN) return;
-    this.onmessage?.({ data: JSON.stringify({ type, payload }) });
+    this.onmessage?.({ data: JSON.stringify({ type, payload, id }) });
   }
 
   drop(): void {
@@ -71,8 +78,22 @@ class FakeSocket implements SocketLike {
   }
 }
 
+/** A refusal from a fake service, as the core's RpcError. */
+export class ServiceError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export type Services = (method: string, params: Record<string, unknown>) => object;
+
 export class Hub {
   up = true;
+  /** Answers `request`; without it every method is unknown, as in a bare core. */
+  services: Services | null = null;
   readonly sockets = new Set<FakeSocket>();
   readonly sent: SentCommand[] = [];
   /** The latest of each state event, replayed on connection like the core does. */
@@ -120,6 +141,16 @@ export class Hub {
     const command = { role, message };
     this.sent.push(command);
     for (const listener of this.commandListeners) listener(command);
+  }
+
+  answer(method: string, params: Record<string, unknown>): object {
+    try {
+      if (this.services === null) throw new ServiceError("unknown_method", method);
+      return { ok: true, data: this.services(method, params) };
+    } catch (error) {
+      const code = error instanceof ServiceError ? error.code : "failed";
+      return { ok: false, error: code, message: (error as Error).message };
+    }
   }
 
   onCommand(listener: (command: SentCommand) => void): () => void {

@@ -67,6 +67,10 @@ export interface PanelState {
   nextToast: number;
   /** A tutorial on screen: its steps, for Previous / Next (DESIGN.md section 6). */
   guide: { texts: string[]; index: number } | null;
+  /** Bumped by the palette hotkey: the bar opens anew (a new key)... */
+  palette: number;
+  /** ...with this already typed: "/" after the palette, "" otherwise. */
+  prefill: string;
 }
 
 export const initial: PanelState = {
@@ -81,6 +85,8 @@ export const initial: PanelState = {
   toasts: [],
   nextToast: 1,
   guide: null,
+  palette: 0,
+  prefill: "",
 };
 
 export type PanelEvent =
@@ -103,6 +109,7 @@ export type PanelEvent =
   | { type: "guide.step"; index: number }
   // From the user.
   | { type: "toggle" }
+  | { type: "palette" }
   | { type: "escape" }
   | { type: "submit"; question: string }
   | { type: "approval.answered" }
@@ -139,6 +146,7 @@ export function reduce(state: PanelState, event: PanelEvent): PanelState {
         ...state,
         attachment: capture ?? state.attachment,
         focus: true,
+        prefill: "",
       };
       if (view === "answer") {
         next.answer = {
@@ -271,10 +279,23 @@ export function reduce(state: PanelState, event: PanelEvent): PanelState {
     case "toast.dismiss":
       return { ...state, toasts: state.toasts.filter((t) => t.id !== event.id) };
 
+    case "palette": {
+      const palette = state.palette + 1;
+      // Never cover a pending question: open behind it, as panel.open does.
+      const opened = { ...state, palette, prefill: "/" };
+      if (INTERRUPTIONS.has(state.view)) return { ...opened, back: "bar" };
+      return { ...opened, view: "bar", back: "hidden", focus: true };
+    }
+
     case "toggle":
       if (state.view === "approval" || state.view === "capture") return state;
       if (state.view !== "hidden") return { ...state, view: "hidden", focus: false };
-      return { ...state, view: state.answer ? "answer" : "bar", focus: true };
+      return {
+        ...state,
+        view: state.answer ? "answer" : "bar",
+        focus: true,
+        prefill: "",
+      };
 
     case "escape":
       switch (state.view) {

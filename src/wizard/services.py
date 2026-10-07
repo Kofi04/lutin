@@ -371,6 +371,17 @@ def register(rpc: Rpc, app: AvatarApp) -> None:
         app._resume_conversation(conversation.id)
         return {}
 
+    @method("history.export")
+    def history_export(params: dict) -> dict:
+        # The path comes from the window's native "save as": the user chose it.
+        conversation = conversation_or_fail(params)
+        target = Path(str(params["path"]))
+        try:
+            target.write_text(history.export_markdown(conversation.id), encoding="utf-8")
+        except OSError as exc:
+            raise RpcError("write_failed", f"Export impossible : {exc}") from exc
+        return {"path": str(target)}
+
     @method("history.kinds")
     def history_kinds(params: dict) -> dict:
         return {"kinds": [{"value": k, "label": v} for k, v in KINDS.items()]}
@@ -434,8 +445,14 @@ def register(rpc: Rpc, app: AvatarApp) -> None:
     @method("hooks.apply")
     def hooks_apply(params: dict) -> dict:
         # Planned again here: what is written is what the core computes now,
-        # never a diff a window sent.
+        # never a diff a window sent. That diff only proves what the user saw:
+        # if settings.json changed since, they approved something else.
         installing, plan = plan_for(params)
+        if plan.diff != str(params["seen"]):
+            raise RpcError(
+                "stale",
+                "settings.json a changé depuis l'affichage : relisez le changement.",
+            )
         if not app._apply_hooks(plan):
             raise RpcError("write_failed", "L'écriture de settings.json a échoué.")
         return {"installed": hooks_installer.is_installed()}

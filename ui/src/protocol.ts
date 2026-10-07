@@ -14,7 +14,8 @@ export const PROTOCOL_VERSION = 1;
 export type Mood =
   "calm" | "busy" | "stressed" | "tired" | "working" | "waiting" | "done" | "error";
 export type Decision = "allow" | "always" | "deny";
-export type Role = "avatar" | "panel" | "overlay" | "settings" | "history" | "dev";
+export type Role =
+  "avatar" | "panel" | "overlay" | "app" | "settings" | "history" | "dev";
 export type ToastKind = "info" | "success" | "warning" | "error";
 export type CaptureKind = "region" | "window" | "file" | "screen";
 export type ActionName =

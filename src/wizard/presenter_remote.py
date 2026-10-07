@@ -25,7 +25,7 @@ from collections import OrderedDict
 
 from PySide6.QtCore import QObject, QRect, QTimer, Signal
 
-from . import __version__, screens
+from . import __version__, onboarding, screens
 from .assistant import selection as selection_actions
 from .capture.cloak import RemoteCloak
 from .overlay.scene import Highlight, Pointer
@@ -110,6 +110,7 @@ class ProtocolPresenter(Presenter):
         self._connection = ("connecting", "")
         self._sessions: list[dict] = []
         self._quiet = False
+        self._onboarding_pending = False
         self._approval: dict | None = None
         self._approval_timer = QTimer()
         self._approval_timer.setSingleShot(True)
@@ -234,6 +235,8 @@ class ProtocolPresenter(Presenter):
         send(client, "sessions.update", {"sessions": self._sessions})
         if self._quiet:
             send(client, "quiet", {"on": True})
+        if self._onboarding_pending and not onboarding.already_shown():
+            send(client, "window.open", {"name": "onboarding"})
         if self._approval is not None:
             remaining = max(1, round(self._approval_timer.remainingTime() / 1000))
             send(
@@ -546,17 +549,23 @@ class ProtocolPresenter(Presenter):
         self._emit("guide.clear")
         self.app._grab_escape(False)
 
-    # -- windows not ported yet -------------------------------------------
+    # -- the app window ---------------------------------------------------
 
     def open_window(self, name: str) -> None:
         if name in WINDOWS:
             self._emit("window.open", {"name": name})
 
     def confirm_hooks(self, plan, installing: bool) -> bool:
-        # Writing settings.json needs the diff shown first, and that window
-        # does not exist on the Tauri side yet: ask for it, change nothing.
+        # The diff is shown in the app window, which applies it itself
+        # (services.py, hooks.apply): nothing is written from here.
         self.open_window("hooks.install" if installing else "hooks.uninstall")
         return False
+
+    def show_onboarding(self) -> None:
+        # Called at startup, before any window has connected: sent on connect
+        # (_send_state) until the welcome is dismissed.
+        self._onboarding_pending = True
+        self.open_window("onboarding")
 
 
 def _point(x: float, y: float, label: str) -> dict:

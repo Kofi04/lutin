@@ -9,7 +9,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{supervisor, windows};
+use crate::{position, supervisor, windows};
 
 #[derive(Clone, Serialize)]
 struct TrayAction<'a> {
@@ -23,35 +23,33 @@ const ACTIONS: [(&str, &str, &str); 3] = [
     ("screen", "Capturer l'écran", "capture.screen"),
 ];
 
+/// (menu id, label, app window view): the Qt menu's windows, now views.
+const VIEWS: [(&str, &str, &str); 7] = [
+    ("view-quick-note", "Note rapide", "notes/new"),
+    ("view-clipboard", "Presse-papiers", "clipboard"),
+    ("view-notes", "Notes", "notes"),
+    ("view-reminders", "Me rappeler…", "reminders"),
+    ("view-history", "Historique des discussions", "history"),
+    ("view-agent", "Lancer un agent…", "agent"),
+    ("view-settings", "Paramètres…", "settings"),
+];
+
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
-    let mut items = Vec::new();
+    let item = |id: &str, label: &str| MenuItem::with_id(app, id, label, true, None::<&str>);
+    let menu = Menu::new(app)?;
     for (id, label, _) in ACTIONS {
-        items.push(MenuItem::with_id(app, id, label, true, None::<&str>)?);
+        menu.append(&item(id, label)?)?;
     }
-    let toggle = MenuItem::with_id(
-        app,
-        "toggle",
-        "Masquer / Afficher le sorcier",
-        true,
-        None::<&str>,
-    )?;
-    let restart = MenuItem::with_id(app, "restart", "Redémarrer le cœur", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quitter", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let separator2 = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(
-        app,
-        &[
-            &items[0],
-            &items[1],
-            &items[2],
-            &separator,
-            &toggle,
-            &restart,
-            &separator2,
-            &quit,
-        ],
-    )?;
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    for (id, label, _) in VIEWS {
+        menu.append(&item(id, label)?)?;
+    }
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&item("toggle", "Masquer / Afficher le sorcier")?)?;
+    menu.append(&item("snap", "Replacer sur la barre")?)?;
+    menu.append(&item("restart", "Redémarrer le cœur")?)?;
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&item("quit", "Quitter")?)?;
 
     let mut builder = TrayIconBuilder::with_id("main")
         .tooltip("Little Wizard")
@@ -84,7 +82,17 @@ fn on_menu(app: &AppHandle, id: &str) {
         );
         return;
     }
+    if let Some((_, _, view)) = VIEWS.iter().find(|(menu_id, _, _)| *menu_id == id) {
+        let _ = windows::open_app_window(app, view);
+        return;
+    }
     match id {
+        "snap" => {
+            position::forget(app);
+            if let Some(avatar) = app.get_webview_window(windows::AVATAR) {
+                let _ = windows::snap_avatar(&avatar);
+            }
+        }
         "toggle" => {
             if let Some(avatar) = app.get_webview_window(windows::AVATAR) {
                 let visible = avatar.is_visible().unwrap_or(true);

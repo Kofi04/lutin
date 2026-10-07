@@ -39,6 +39,8 @@ export interface WindowEnv {
   /** A message to our other windows (the panel's step buttons). */
   broadcast(name: string, payload: unknown): void;
   onBroadcast(name: string, listener: (payload: unknown) => void): () => void;
+  /** Open (or bring back) the app window on a view, "notes/new" say. */
+  openApp(view: string): void;
   /** Tray entries that are core actions, for the avatar to send. */
   onTrayAction(listener: (name: ActionName) => void): () => void;
 }

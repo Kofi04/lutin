@@ -6,10 +6,10 @@
 
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl,
-    WebviewWindow, WebviewWindowBuilder,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
-use crate::protect;
+use crate::{position, protect};
 
 pub const AVATAR: &str = "avatar";
 pub const PANEL: &str = "panel";
@@ -69,6 +69,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     // spilled off-screen. Resized now, the minimum above applies instead.
     avatar.set_size(LogicalSize::new(AVATAR_SIZE, AVATAR_SIZE))?;
     place_avatar(&avatar)?;
+    position::watch(&avatar);
     protect::apply(&avatar);
     set_visible(&avatar, true, false)?;
 
@@ -82,11 +83,21 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Where he was left (position.rs), or the default corner.
+fn place_avatar(avatar: &WebviewWindow) -> tauri::Result<()> {
+    match position::saved(avatar) {
+        Some(at) => {
+            position::placing(at);
+            avatar.set_position(at)
+        }
+        None => snap_avatar(avatar),
+    }
+}
+
 /// Bottom-right corner of the primary screen, just above the taskbar.
 ///
 /// The work area is the screen minus the taskbar, wherever the taskbar is.
-/// Remembering where the user dragged him is phase M4.
-fn place_avatar(avatar: &WebviewWindow) -> tauri::Result<()> {
+pub fn snap_avatar(avatar: &WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = avatar.primary_monitor()? else {
         return Ok(());
     };
@@ -95,7 +106,9 @@ fn place_avatar(avatar: &WebviewWindow) -> tauri::Result<()> {
     let size = ((AVATAR_SIZE + MARGIN) * scale).round() as i32;
     let x = area.position.x + area.size.width as i32 - size;
     let y = area.position.y + area.size.height as i32 - size;
-    avatar.set_position(PhysicalPosition::new(x, y))
+    let at = PhysicalPosition::new(x, y);
+    position::placing(at);
+    avatar.set_position(at)
 }
 
 /// Ask the panel to open or close: its own state machine decides what that
@@ -188,7 +201,9 @@ pub fn set_visible(window: &WebviewWindow, visible: bool, focus: bool) -> tauri:
 /// An ordinary window, framed and resizable, unlike the floating ones: it is
 /// where you go to read or change things, so it takes the focus.
 pub fn open_app_window(app: &AppHandle, view: &str) -> tauri::Result<()> {
-    if !APP_VIEWS.contains(&view) {
+    // "hooks/install": a known view, then an optional lowercase word for it.
+    let (base, param) = view.split_once('/').unwrap_or((view, ""));
+    if !APP_VIEWS.contains(&base) || !param.chars().all(|c| c.is_ascii_lowercase()) {
         return Ok(());
     }
     if let Some(window) = app.get_webview_window(APP) {
@@ -207,6 +222,14 @@ pub fn open_app_window(app: &AppHandle, view: &str) -> tauri::Result<()> {
             .visible(false)
             .build()?;
     protect::apply(&window);
+    // Closed means hidden: it reopens at once, on the view asked for.
+    let hide = window.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = set_visible(&hide, false, false);
+        }
+    });
     set_visible(&window, true, true)
 }
 

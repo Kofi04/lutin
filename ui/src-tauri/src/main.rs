@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod cursor;
+mod position;
 mod protect;
 mod supervisor;
 mod tray;
@@ -11,6 +12,7 @@ use tauri::RunEvent;
 
 fn main() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(supervisor::Supervisor::new())
         .invoke_handler(tauri::generate_handler![
             supervisor::core_endpoint,

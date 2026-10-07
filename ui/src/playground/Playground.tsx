@@ -12,6 +12,9 @@ import {
   type ReactNode,
 } from "react";
 
+import "../app/app.css";
+import { AppWindow } from "../app/AppWindow";
+import type { AppEnv } from "../app/env";
 import { AvatarCanvas } from "../avatar/AvatarCanvas";
 import { VISUAL_STATES } from "../avatar/state";
 import type { ActionName } from "../protocol";
@@ -21,6 +24,7 @@ import { Panel } from "../panel/Panel";
 import { Desk } from "./desk";
 import { Frame } from "./frame";
 import { Hub, type SentCommand } from "./hub";
+import { fakeServices } from "./services";
 import { play, type Scenario } from "./scenario";
 
 const SCENARIOS = Object.values(
@@ -150,23 +154,47 @@ function Run({
   onStep: (index: number) => void;
   trayRef: { current: ((name: ActionName) => void) | null };
 }) {
-  const hub = useMemo(() => new Hub(), []);
+  const hub = useMemo(() => {
+    const created = new Hub();
+    created.services = fakeServices();
+    return created;
+  }, []);
   const avatarBox = useRef<HTMLDivElement>(null);
   const [panelSize, setPanelSize] = useState({ width: 552, height: 140 });
   const desk = useMemo(() => new Desk(scenario.screens, SCREEN_SCALE), [scenario]);
+  const openAppRef = useRef<(view: string) => void>(() => {});
   const frames = useMemo(() => {
     // The avatar's click reaches the panel as Tauri's "panel://toggle" does.
     const toggles = new Set<() => void>();
     const panel = new Frame(hub, "panel", false, {
       desk,
+      openApp: (view) => openAppRef.current(view),
       onPanelToggle: (listener) => {
         toggles.add(listener);
         return () => toggles.delete(listener);
       },
       onSize: (width, height) => setPanelSize({ width, height }),
     });
+    // The app window: hidden until the avatar or the panel asks for a view,
+    // as windows.rs opens it.
+    const app = new Frame(hub, "app", false, { desk });
+    const views = new Set<(view: string) => void>();
+    const appEnv: AppEnv = {
+      onView: (listener) => {
+        views.add(listener);
+        return () => views.delete(listener);
+      },
+      pickFolder: async () => "C:/Users/vous/projets/demo",
+      saveFile: async (name) => `C:/Users/vous/Documents/${name}`,
+      close: () => app.setVisible(false),
+    };
+    const openApp = (view: string) => {
+      app.setVisible(true);
+      views.forEach((listener) => listener(view));
+    };
     const avatar = new Frame(hub, "avatar", true, {
       desk,
+      openApp,
       onPointer: pointerFrom(avatarBox),
       togglePanel: () => toggles.forEach((toggle) => toggle()),
       onTrayAction: (listener) => {
@@ -178,7 +206,8 @@ function Run({
       screen,
       frame: new Frame(hub, "overlay", false, { desk }),
     }));
-    return { avatar, panel, overlays };
+    openAppRef.current = openApp;
+    return { avatar, panel, overlays, app, appEnv, openApp };
   }, [hub, scenario, trayRef, desk]);
 
   // The page's mouse over a pretend screen is the pointer on that screen.
@@ -233,6 +262,39 @@ function Run({
       <div
         style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}
       >
+        <WindowBox frame={frames.app} title="Fenêtre app (860 × 620)">
+          <div
+            style={{
+              width: 860,
+              height: 620,
+              background: "var(--lw-color-window)",
+              border: "1px solid var(--lw-color-border)",
+              color: "var(--lw-color-text)",
+            }}
+          >
+            <AppWindow
+              client={frames.app.client}
+              env={frames.appEnv}
+              initial="settings"
+            />
+          </div>
+          <div className="lw-row" style={{ marginTop: 8, flexWrap: "wrap" }}>
+            {[
+              "settings",
+              "history",
+              "clipboard",
+              "notes/new",
+              "reminders",
+              "hooks/install",
+              "onboarding",
+              "agent",
+            ].map((view) => (
+              <button key={view} className="lw-chip" onClick={() => frames.openApp(view)}>
+                {view}
+              </button>
+            ))}
+          </div>
+        </WindowBox>
         {frames.overlays.map(({ screen, frame }) => (
           <WindowBox
             key={screen.id}

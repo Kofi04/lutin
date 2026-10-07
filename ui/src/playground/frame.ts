@@ -22,6 +22,7 @@ export class Frame {
     visible: boolean,
     hooks: {
       togglePanel?: () => void;
+      openApp?: (view: string) => void;
       onTrayAction?: (listener: (name: ActionName) => void) => () => void;
       onPointer?: WindowEnv["onPointer"];
       onPanelToggle?: WindowEnv["onPanelToggle"];
@@ -36,6 +37,7 @@ export class Frame {
       hide: () => this.setVisible(false),
       startDragging: () => hooks.log?.(`${role} : glisser (sans effet ici)`),
       togglePanel: () => hooks.togglePanel?.(),
+      openApp: (view) => hooks.openApp?.(view),
       syncOverlays: async () => {},
       onPointer: hooks.onPointer ?? (() => () => {}),
       placePanel: async (width, height) => hooks.onSize?.(width, height),

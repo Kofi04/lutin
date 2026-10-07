@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Little Wizard</title>
+    <link rel="stylesheet" href="/src/windows/base.css" />
+    <style>
+      /* An ordinary window: opaque, unlike the floating ones. */
+      html,
+      body,
+      #root {
+        background: var(--lw-color-window);
+        user-select: text;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/windows/app.tsx"></script>
+  </body>
+</html>

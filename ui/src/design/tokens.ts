@@ -7,6 +7,8 @@
 
 /** Floating surfaces are always dark (DESIGN.md section 3). */
 export const colors = {
+  /** The app window (DESIGN.md section 9): opaque, the floating surface's tone. */
+  window: "#141418",
   surface: "rgba(16,16,20,0.94)",
   surfaceRaised: "rgba(30,30,36,0.96)",
   border: "rgba(255,255,255,0.08)",

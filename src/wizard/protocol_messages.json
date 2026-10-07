@@ -8,7 +8,7 @@
       "payload": {
         "token": "string",
         "protocol": "integer",
-        "role": ["avatar", "panel", "overlay", "settings", "history", "dev"],
+        "role": ["avatar", "panel", "overlay", "app", "settings", "history", "dev"],
         "pid": "integer?"
       }
     },
@@ -229,7 +229,7 @@
     "cloak.show": { "from": "core", "payload": { "cloak_id": "string" } },
     "window.open": {
       "from": "core",
-      "doc": "A window the Tauri UI does not have yet (phase M6 bis) was asked for.",
+      "doc": "Open a window: the avatar page opens the app window on that view (palette opens the panel's command bar). onboarding is also sent on connect until the welcome is dismissed.",
       "payload": {
         "name": [
           "quick_note",

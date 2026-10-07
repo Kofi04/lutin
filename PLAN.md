@@ -12,7 +12,7 @@ partout ailleurs dans le projet.
 | 6 Mode Live | ⏸️ en pause, dépend du moteur choisi en phase 5 |
 | 7 Historique des discussions | ✅ faite |
 | 8 Fonctions d'assistant | ✅ faite (sélection, agents, mémoire, OCR, rappels, images) |
-| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau) · M6 ✅ (curseur guide) · M6 bis, M7 à faire — voir « Migration UI » en fin de document |
+| Migration UI vers Tauri (M1–M7) | M1 ✅ (protocole, WebSocket, `--headless`) · M2 ✅ (squelette Tauri) · M3 ✅ (terrain d'essai) · M4 ✅ (tokens, avatar Canvas) · M5 ✅ (panneau) · M6 ✅ (curseur guide) · M6 bis ✅ (fenêtre app) · M7 à faire — voir « Migration UI » en fin de document |
 
 ## Contexte
 
@@ -852,6 +852,40 @@ de RAM, la compilation parallèle de la crate `tauri` fait planter rustc).
 Paramètres, Historique, Accueil, confirmation des hooks, lancement d'agent, en
 fenêtres Tauri normales nourries par les requêtes `settings.*`, `history.*`,
 `hooks.*`. La palette devient le `/` de la barre.
+
+**Fait (M6 bis)** — Tests : 797 Python, 246 Vitest, 5 Rust.
+
+- Protocole : `request {method, params}` → `reply {ok, data | error, message}`, toujours avec
+  un id. `rpc.py` est une liste blanche : la page ne peut atteindre que ce que le core y a mis.
+- `services.py` : chaque action des fenêtres Qt derrière un nom (`settings.*`, `clips.*`,
+  `notes.*`, `timers.*`, `launcher.*`, `history.*`, `transcripts.*`, `hooks.*`,
+  `onboarding.*`, `agents.*`, `system.*`), mêmes fonctions et mêmes messages qu'avant.
+  `settings_schema.py` décrit les champs (libellés, bornes) et revérifie chaque valeur ;
+  `onboarding.py` sort l'état de l'accueil de sa fenêtre Qt.
+- Une fenêtre `app` (DESIGN §9) : Historique (dont « Mes sessions Claude Code »),
+  Presse-papiers, Notes (et la note rapide), Rappels, Agent, Hooks, Paramètres (dont la
+  mémoire et la capture de raccourcis, règles de `hotkey_spec.py` portées), Bienvenue.
+- La palette ouvre la barre avec `/` tapé ; le `/` liste aussi les vues et le lanceur.
+- Tray : les vues de l'app, « Replacer sur la barre ». La position de l'avatar est retenue
+  (`position.rs`), relue seulement si elle tombe encore sur un écran.
+- Sécurité : le diff des hooks n'est écrit que s'il est celui que l'utilisateur a vu.
+- Dépendance ajoutée : `tauri-plugin-dialog` (officiel, il tire `tauri-plugin-fs`), pour les
+  sélecteurs natifs. Un dialogue Qt ouvert par le core apparaîtrait souvent derrière la
+  fenêtre : Windows refuse le premier plan à un processus d'arrière-plan.
+
+Vérifié dans le terrain d'essai (faux services en mémoire, mêmes formes que le core) : chaque
+vue ; conflit de raccourci détecté en direct et « Enregistrer » bloqué ; valeur hors bornes
+refusée avec le message du core ; renommer, épingler, exporter ; note rapide Ctrl+Entrée qui
+ferme la fenêtre ; rappel à durée illisible refusé ; diff des hooks puis écriture ; `/` avec
+vues et lanceur. **Dans l'app réelle** (sans rien afficher : une connexion de plus depuis la
+page panel cachée) : les méthodes en lecture répondent sur tes vraies données, une méthode
+inconnue est refusée, et quitter l'app arrête bien le core. Non vérifié dans l'app réelle :
+la fenêtre `app` elle-même à l'écran (l'ouvrir prend le focus) et les sélecteurs natifs — à
+tester à la main.
+
+Reste pour M7 : `ui.exclude_from_capture = false` n'est toujours pas lu par Tauri ; la
+position retenue par l'avatar Qt (`state.ini`) n'est pas reprise ; le Ctrl+glisser du sorcier
+sur une fenêtre (capture d'une fenêtre) n'existe pas côté Tauri.
 
 ### Phase M7 — Suppression du Qt visible, puis packaging
 

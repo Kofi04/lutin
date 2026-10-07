@@ -20,6 +20,7 @@ export default defineConfig({
         avatar: resolve(import.meta.dirname, "avatar.html"),
         panel: resolve(import.meta.dirname, "panel.html"),
         overlay: resolve(import.meta.dirname, "overlay.html"),
+        app: resolve(import.meta.dirname, "app.html"),
       },
     },
   },

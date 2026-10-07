@@ -290,3 +290,32 @@ Ces comportements existent et sont bons. Ils sont non négociables :
 **À faire :** une icône par action (Lucide), des libellés de 1 à 3 mots, un retour visuel au survol pour tout ce qui est cliquable, un état vide soigné partout, des raccourcis affichés dans les infobulles.
 
 **À ne pas faire :** emoji dans l'interface, dégradés décoratifs, plus de 2 niveaux de gris de texte dans une même carte, `QMenu`/menus système pour les actions principales, nouvelles fenêtres flottantes indépendantes, copier le personnage, le nom ou les sons de Coucou (droits réservés — seul son code est MIT).
+
+---
+
+## 9. La fenêtre app (décidée en M6 bis)
+
+Une seule fenêtre **ordinaire** (cadre Windows, redimensionnable, barre des tâches) remplace
+toutes les boîtes de dialogue Qt : Historique, Presse-papiers, Notes, Rappels, Lancer un agent,
+Hooks Claude Code, Paramètres, Bienvenue. Ce n'est pas une surface flottante : §1 (ne jamais
+voler le focus) ne s'y applique pas — on l'ouvre pour s'en servir, elle prend le clavier.
+
+- **Une fenêtre, des vues** : navigation à gauche, une vue à droite. Le core demande une
+  fenêtre par son nom (`window.open`), la page avatar la traduit en vue (`quick_note` →
+  `notes/new`, `hooks.install` → `hooks/install`) et l'ouvre ; la palette, elle, reste le `/`
+  de la barre du panneau, enrichi des vues et des entrées du lanceur.
+- **Fermer = masquer** : elle se rouvre aussitôt, sur la vue demandée. Échap la ferme aussi,
+  sauf dans un champ de raccourci où Échap sert à en sortir.
+- **Rien n'est gardé dans la page** : chaque lecture et chaque changement passe par
+  `request`/`reply` (`services.py`). Le core revérifie tout (bornes des réglages, conflits de
+  raccourcis, dossier de l'agent) et répond par un message en français, affiché tel quel.
+- **Hooks** : la vue renvoie le diff qu'elle a montré ; le core recalcule le plan et n'écrit
+  que s'il est identique. Un `settings.json` modifié entre-temps est refusé (« relisez le
+  changement ») : on n'approuve jamais autre chose que ce qu'on a vu.
+- **Confirmations** dans le bouton lui-même (« Supprimer » → « Supprimer ? »), pas de boîte
+  système : `window.confirm` n'est pas fiable dans WebView2.
+- **Thème** : sombre, opaque (`--lw-color-window`), mêmes tokens que les surfaces. Un thème
+  clair n'est pas fait.
+- Sélecteurs natifs (dossier de l'agent, « Exporter… ») par `tauri-plugin-dialog`, permis à
+  cette seule fenêtre (`capabilities/app.json`).
+

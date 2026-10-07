@@ -287,23 +287,26 @@ def test_history_delete_and_missing(rpc, app):
 # -- hooks, onboarding, agents ---------------------------------------------------
 
 
-def test_hooks_apply_plans_again_in_the_core(rpc, app, monkeypatch, tmp_path):
+def test_hooks_apply_writes_only_what_the_user_saw(rpc, app, monkeypatch, tmp_path):
     from wizard.bridge import installer
 
-    seen = []
+    settings = tmp_path / "settings.json"
     real = installer.plan_install
-    monkeypatch.setattr(
-        installer,
-        "plan_install",
-        lambda: seen.append(1) or real(tmp_path / "settings.json"),
-    )
-    # A diff the window might send is not even read.
-    rpc.call("hooks.apply", {"install": True, "diff": "rm -rf"})
-    assert seen == [1]
-    assert app.calls[-1][0] == "hooks"
+    monkeypatch.setattr(installer, "plan_install", lambda: real(settings))
+    seen = rpc.call("hooks.plan", {"install": True})["diff"]
+
+    # settings.json edited in the meantime: the diff shown is no longer true.
+    settings.write_text('{"theme": "dark"}', encoding="utf-8")
+    assert refused(rpc, "hooks.apply", {"install": True, "seen": seen}).code == "stale"
+    assert app.calls == []
+
+    seen = rpc.call("hooks.plan", {"install": True})["diff"]
+    rpc.call("hooks.apply", {"install": True, "seen": seen})
+    assert app.calls == [("hooks", True)]
 
     app.apply_ok = False
-    assert refused(rpc, "hooks.apply", {"install": True}).code == "write_failed"
+    error = refused(rpc, "hooks.apply", {"install": True, "seen": seen})
+    assert error.code == "write_failed"
 
 
 def test_onboarding_sends_markdown_never_html(rpc):
@@ -337,3 +340,15 @@ def test_agent_launch_remembers_the_folder(rpc, app, tmp_path):
     rpc.call("agents.launch", {"task": "fais passer les tests", "folder": str(tmp_path)})
     assert ("agent", "fais passer les tests", str(tmp_path)) in app.calls
     assert rpc.call("agents.last_folder", {}) == {"folder": str(tmp_path)}
+
+
+def test_history_export_writes_the_markdown(rpc, app, tmp_path):
+    talk = app.history.start("question", title="À garder")
+    app.history.add_message(talk, "user", "Bonjour")
+    target = tmp_path / "out.md"
+    rpc.call("history.export", {"id": talk, "path": str(target)})
+    assert "Bonjour" in target.read_text(encoding="utf-8")
+    missing = tmp_path / "nope" / "out.md"
+    assert refused(rpc, "history.export", {"id": talk, "path": str(missing)}).code == (
+        "write_failed"
+    )

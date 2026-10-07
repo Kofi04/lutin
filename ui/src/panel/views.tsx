@@ -34,8 +34,18 @@ export const SLASH_ACTIONS: { name: ActionName; label: string }[] = [
   { name: "quit", label: "Quitter Little Wizard" },
 ];
 
+/** A "/" entry that is not a core action: a view of the app, a launcher. */
+export interface SlashItem {
+  key: string;
+  label: string;
+  run(): void;
+}
+
 export interface BarProps {
   attachment: { label: string } | null;
+  /** "/" for the palette hotkey: the list open at once. */
+  initialText?: string;
+  extra?: SlashItem[];
   focus: boolean;
   onAsk(text: string): void;
   onAction(name: ActionName): void;
@@ -45,13 +55,15 @@ export interface BarProps {
 
 export function Bar({
   attachment,
+  initialText = "",
+  extra = [],
   focus,
   onAsk,
   onAction,
   onAgent,
   onRemoveAttachment,
 }: BarProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText);
   const [agent, setAgent] = useState(false);
   const [folder, setFolder] = useState("");
   const [picked, setPicked] = useState(0);
@@ -62,16 +74,24 @@ export function Bar({
   }, [focus, agent]);
 
   const slash = !agent && text.startsWith("/");
-  const actions = useMemo(
-    () => (slash ? rank(text.slice(1), SLASH_ACTIONS, (a) => a.label) : []),
-    [slash, text],
-  );
+  const actions = useMemo(() => {
+    if (!slash) return [];
+    const items: SlashItem[] = [
+      ...SLASH_ACTIONS.map((a) => ({
+        key: a.name,
+        label: a.label,
+        run: () => onAction(a.name),
+      })),
+      ...extra,
+    ];
+    return rank(text.slice(1), items, (item) => item.label);
+  }, [slash, text, extra, onAction]);
 
   const submit = () => {
     if (slash) {
-      const action = actions[picked];
-      if (action) {
-        onAction(action.name);
+      const item = actions[picked];
+      if (item) {
+        item.run();
         setText("");
       }
       return;
@@ -130,12 +150,12 @@ export function Bar({
         <ul className="lw-list lw-section" style={{ paddingTop: 0 }}>
           {actions.length === 0 && <li className="lw-meta">Aucune action</li>}
           {actions.map((action, i) => (
-            <li key={action.name}>
+            <li key={action.key}>
               <button
                 className="lw-chip"
                 aria-selected={i === picked}
                 onClick={() => {
-                  onAction(action.name);
+                  action.run();
                   setText("");
                 }}
               >

@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { viewFor } from "../app/routes";
 import { isActivity } from "../avatar/activity";
 import { AvatarCanvas } from "../avatar/AvatarCanvas";
 import { CountdownRing } from "../avatar/CountdownRing";
@@ -65,6 +66,11 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
       client.onAny((message) => {
         stats.messages[message.type] = (stats.messages[message.type] ?? 0) + 1;
         if (isActivity(message)) setLastActivity(Date.now());
+      }),
+      // The avatar is the one window always there: it opens the others.
+      client.on("window.open", (p) => {
+        const view = viewFor(p.name);
+        if (view !== null) env.openApp(view);
       }),
       env.onTrayAction((name) => client.send("action", { name })),
     ];

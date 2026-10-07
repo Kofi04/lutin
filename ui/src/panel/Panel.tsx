@@ -9,7 +9,15 @@
  */
 
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import type { CoreClient } from "../core/client";
 import { springs } from "../design/motion";
@@ -25,7 +33,19 @@ import {
   SelectionView,
   ToastView,
   StepsCard,
+  type SlashItem,
 } from "./views";
+
+/** "/" entries that open a view of the app window (ui_palette.py had them). */
+const VIEW_ITEMS: [string, string][] = [
+  ["notes/new", "Note rapide"],
+  ["clipboard", "Presse-papiers"],
+  ["notes", "Notes"],
+  ["reminders", "Me rappeler…"],
+  ["history", "Historique des discussions"],
+  ["agent", "Lancer un agent…"],
+  ["settings", "Paramètres…"],
+];
 
 /** Space around the surface for its shadow, as in panel.css. */
 const MARGIN = 16;
@@ -76,9 +96,45 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
       ),
       client.on("guide.clear", () => dispatch({ type: "guide.clear" })),
       env.onPanelToggle(() => dispatch({ type: "toggle" })),
+      client.on("window.open", (p) => {
+        if (p.name === "palette") dispatch({ type: "palette" });
+      }),
     ];
     return () => off.forEach((stop) => stop());
   }, [client, env]);
+
+  // The launcher entries of config.toml, asked for each time the bar opens:
+  // a config reload may have changed them.
+  const [launchers, setLaunchers] = useState<{ index: number; label: string }[]>([]);
+  const barOpen = state.view === "bar";
+  useEffect(() => {
+    if (!barOpen) return;
+    client
+      .request<{ items: { index: number; label: string }[] }>("launcher.list")
+      .then((r) => setLaunchers(r.items))
+      .catch(() => setLaunchers([]));
+  }, [client, barOpen]);
+  const slashExtra = useMemo<SlashItem[]>(
+    () => [
+      ...VIEW_ITEMS.map(([view, label]) => ({
+        key: `view:${view}`,
+        label,
+        run: () => {
+          env.openApp(view);
+          dispatch({ type: "escape" });
+        },
+      })),
+      ...launchers.map((entry) => ({
+        key: `launch:${entry.index}`,
+        label: `Lancer ${entry.label}`,
+        run: () => {
+          void client.request("launcher.run", { index: entry.index }).catch(() => {});
+          dispatch({ type: "escape" });
+        },
+      })),
+    ],
+    [client, env, launchers],
+  );
 
   // -- answers to send ------------------------------------------------------
   const send = client.send.bind(client);
@@ -230,6 +286,9 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
               >
                 {view === "bar" && (
                   <Bar
+                    key={state.palette}
+                    initialText={state.prefill}
+                    extra={slashExtra}
                     attachment={state.attachment}
                     focus={state.focus}
                     onAsk={ask}

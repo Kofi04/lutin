@@ -270,3 +270,25 @@ describe("a tutorial's steps (DESIGN.md section 6: Previous / Next in the panel)
     expect([s.guide, windowVisible(s)]).toEqual([null, false]);
   });
 });
+
+describe("the palette hotkey (the bar with / typed)", () => {
+  it("opens the bar anew, focused, with / typed", () => {
+    const state = run({ type: "palette" });
+    expect(state.view).toBe("bar");
+    expect(state.focus).toBe(true);
+    expect(state.prefill).toBe("/");
+    expect(run({ type: "palette" }, { type: "palette" }).palette).toBe(2);
+  });
+
+  it("does not leave / typed for the next ordinary opening", () => {
+    const state = run({ type: "palette" }, { type: "escape" }, { type: "toggle" });
+    expect(state.view).toBe("bar");
+    expect(state.prefill).toBe("");
+  });
+
+  it("waits behind a pending approval", () => {
+    const state = run(approval, { type: "palette" });
+    expect(state.view).toBe("approval");
+    expect(state.back).toBe("bar");
+  });
+});

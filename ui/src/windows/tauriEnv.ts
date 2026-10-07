@@ -38,6 +38,7 @@ export const tauriEnv: WindowEnv = {
   hide: () => void invoke("window_visible", { visible: false, focus: false }),
   startDragging: () => void getCurrentWindow().startDragging(),
   togglePanel: () => void invoke("toggle_panel"),
+  openApp: (view) => void invoke("app_window", { view }),
   syncOverlays: () => invoke("overlays_sync"),
   onPointer(listener) {
     watchCentre();

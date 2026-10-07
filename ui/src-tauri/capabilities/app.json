@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "app-window",
+  "description": "The app window alone may open the native folder and save pickers.",
+  "windows": ["app"],
+  "permissions": ["dialog:allow-open", "dialog:allow-save"]
+}

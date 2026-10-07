@@ -762,6 +762,20 @@ show: at rest the overlays are hidden and receive nothing. Measured with the
 panel and the guide in place, mouse still: **0.76 % of one core for the whole
 app, the warm Claude Code process included**.
 
+### The app window (phase M6 bis)
+
+Everything the Qt dialogs did now lives in one ordinary, resizable window:
+history (including your Claude Code sessions, read-only), clipboard, notes,
+reminders, agent launch, Claude Code hooks, settings and the welcome. Open it
+from the tray, a hotkey, or `/` in the panel's bar. Closing it only hides it.
+
+The window keeps nothing itself: it asks the core by method name
+(`request`/`reply`, the list is in `src/wizard/services.py`), and the core
+checks every value again before acting. Installing the hooks writes
+`settings.json` only if the diff you approved is still the one the core would
+write. The avatar now remembers where you left him (tray: *Replacer sur la
+barre* to forget it).
+
 ## Known limits
 
 - Windows only. The modules import cleanly elsewhere (the Win32 calls degrade to

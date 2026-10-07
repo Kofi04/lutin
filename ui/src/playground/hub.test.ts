@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreClient } from "../core/client";
 import { Hub } from "./hub";
+import { fakeServices } from "./services";
 import { play, type Scenario } from "./scenario";
 
 let hub: Hub;
@@ -115,5 +116,30 @@ describe("play", () => {
     stop();
     await vi.advanceTimersByTimeAsync(5000);
     expect(played).toEqual([]);
+  });
+});
+
+describe("the fake core's services", () => {
+  it("answer a request with its data, or the refusal's message", async () => {
+    hub.services = fakeServices();
+    const client = window();
+    await settle();
+
+    const added = client.request<{ id: number }>("notes.add", { body: "pain" });
+    await settle();
+    expect((await added).id).toBeGreaterThan(0);
+
+    const refused = client.request("notes.add", { body: "  " });
+    const caught = refused.catch((error: Error) => error.message);
+    await settle();
+    expect(await caught).toBe("Impossible d'enregistrer une note vide.");
+  });
+
+  it("are all unknown in a bare hub", async () => {
+    const client = window();
+    await settle();
+    const caught = client.request("notes.list").catch((error: Error) => error.message);
+    await settle();
+    expect(await caught).toContain("notes.list");
   });
 });
