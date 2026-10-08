@@ -49,6 +49,8 @@ export interface WindowEnv {
   setInteractive(interactive: boolean): void;
   /** Panel: hide and hand the keyboard back to the app it was taken from. */
   releaseFocus(): Promise<void>;
+  /** Avatar: the tray's menu, at the pointer (a right click on him). */
+  showMenu(): void;
   /** Open (or bring back) the app window on a view, "notes/new" say. */
   openApp(view: string): void;
   /** Tray entries that are core actions, for the avatar to send. */

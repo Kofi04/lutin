@@ -2,7 +2,8 @@
  * The avatar window (DESIGN.md section 4): the figure, its state, and what
  * the mouse does to it.
  *
- * Click opens the panel, dragging moves the window, Ctrl + drag points at a
+ * Click opens the panel, a right click shows the tray's menu at the pointer,
+ * dragging moves the window, Ctrl + drag points at a
  * window to show Claude, a file dropped on him is shown too. Tray entries that
  * are core actions arrive here and leave through this window's connection.
  */
@@ -158,6 +159,10 @@ export function AvatarView({ client, env }: { client: CoreClient; env: WindowEnv
         }
         // A Ctrl + click without moving is a slip, not a pick (as in Qt).
         if (start !== null && !start.ctrl) env.togglePanel();
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault(); // not WebView2's own menu
+        env.showMenu();
       }}
       onPointerCancel={() => {
         press.current = null;

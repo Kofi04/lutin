@@ -154,6 +154,7 @@ Pourquoi : chaque image d'une fenêtre transparente au premier plan est recompos
 - **Clic** → ouvre la barre de commande (§5). Rien d'autre.
 - **Clic droit** → mini-menu de 3 entrées max : Masquer · Paramètres · Quitter.
 - **Glisser** → déplace (position mémorisée). **Ctrl + glisser** → pointer une fenêtre.
+- **Clic droit** → le menu de l'icône de notification, au curseur (ajouté après M7 : chercher l'icône derrière le ^ de la barre des tâches était trop loin). Un seul menu, partagé avec l'icône.
 - **Fichier déposé** → l'avatar ouvre grand la bouche/le chapeau, l'avale, puis la barre s'ouvre avec la pièce jointe.
 - **Survol** → yeux qui grandissent légèrement, orbe un peu plus vive.
 

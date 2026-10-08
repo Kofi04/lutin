@@ -42,6 +42,7 @@ export class Frame {
         hooks.log?.(`${role} : taille ${scale}, clics traversants ${clickThrough}`),
       setCaptureExclusion: () => {},
       setInteractive: () => {},
+      showMenu: () => hooks.log?.(`${role} : menu (le menu de l'icône, au curseur)`),
       releaseFocus: async () => this.setVisible(false),
       onFileDrop: () => () => {},
       syncOverlays: async () => {},

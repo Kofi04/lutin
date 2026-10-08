@@ -36,7 +36,10 @@ const VIEWS: [(&str, &str, &str); 8] = [
     ("view-settings", "Paramètres…", "settings"),
 ];
 
-pub fn create(app: &AppHandle) -> tauri::Result<()> {
+/// The menu, for the tray icon and for a right click on the avatar: one
+/// menu, so the two never drift apart. Its clicks reach `on_menu` through the
+/// app-wide handler (main.rs), whichever of the two was opened.
+pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let item = |id: &str, label: &str| MenuItem::with_id(app, id, label, true, None::<&str>);
     let menu = Menu::new(app)?;
     // The capture actions; "reload" goes with the system entries below.
@@ -54,12 +57,15 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&item("restart", "Redémarrer le cœur")?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&item("quit", "Quitter")?)?;
+    Ok(menu)
+}
 
+pub fn create(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build_menu(app)?;
     let mut builder = TrayIconBuilder::with_id("main")
         .tooltip("Little Wizard")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
@@ -77,7 +83,15 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn on_menu(app: &AppHandle, id: &str) {
+/// A right click on the avatar: the tray's menu, where the pointer is. No
+/// hunting for the icon behind the taskbar's ^ to reach the options.
+#[tauri::command]
+pub fn avatar_menu(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    let menu = build_menu(&app).map_err(|e| e.to_string())?;
+    window.popup_menu(&menu).map_err(|e| e.to_string())
+}
+
+pub fn on_menu(app: &AppHandle, id: &str) {
     if let Some((_, _, action)) = ACTIONS.iter().find(|(menu_id, _, _)| *menu_id == id) {
         let _ = app.emit_to(
             windows::AVATAR,

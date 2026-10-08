@@ -14,7 +14,10 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(supervisor::Supervisor::new())
+        // Every menu's clicks, the tray's and the avatar's right-click one.
+        .on_menu_event(|app, event| tray::on_menu(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
+            tray::avatar_menu,
             supervisor::core_endpoint,
             windows::toggle_panel,
             windows::panel_place,
