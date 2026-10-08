@@ -265,6 +265,46 @@ def test_region_selection_is_asked_of_the_ui(core):
     assert client.wait_for("capture.select").payload == {"mode": "ask"}
 
 
+def test_escape_cancels_a_selection_and_lets_escape_go(core):
+    client = core.test_connect("overlay")
+    client.send("action", {"name": "capture.region"})
+    client.wait_for("capture.select")
+    assert core.test_escapes[-1] is True  # held while the veils are up
+
+    core.ui.on_escape()
+
+    assert client.wait_for("capture.select.end").payload == {}
+    assert core.test_escapes[-1] is False
+
+
+def test_a_drawn_rectangle_ends_the_selection_before_the_grab(core):
+    grabbed = []
+    core.capture.grab_region = lambda rect, for_text=False: grabbed.append(
+        (rect.width(), rect.height(), for_text)
+    )
+    client = core.test_connect("overlay")
+    client.send("action", {"name": "capture.text"})
+    mode = client.wait_for("capture.select").payload["mode"]
+    from wizard import screens
+
+    screen_id = screens.current_screens()[0].id
+    client.send(
+        "capture.region",
+        {
+            "mode": mode,
+            "screen_id": screen_id,
+            "x": 10,
+            "y": 20,
+            "width": 300,
+            "height": 200,
+        },
+    )
+    client.wait_for("capture.select.end")
+    spin_until(lambda: grabbed)
+    assert grabbed == [(300, 200, True)]
+    assert core.test_escapes[-1] is False
+
+
 # -- selection, guide, actions -----------------------------------------------
 
 

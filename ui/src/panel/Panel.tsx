@@ -50,6 +50,8 @@ const VIEW_ITEMS: [string, string][] = [
 
 /** Space around the surface for its shadow, as in panel.css. */
 const MARGIN = 16;
+/** Time for the app given the keyboard back to be in front for Ctrl+C. */
+const SELECTION_DELAY_MS = 150;
 /** How long the content takes to leave before the window shrinks. */
 const EXIT_MS = 180;
 
@@ -207,6 +209,19 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
       });
   };
   const action = (name: ActionName) => {
+    if (name === "selection") {
+      // Ctrl+C goes to the window in front, which is this panel right after
+      // a click on it: hand the keyboard back to the app it came from first.
+      dispatch({ type: "escape" });
+      void env
+        .releaseFocus()
+        .then(() => setTimeout(() => send("action", { name }), SELECTION_DELAY_MS));
+      return;
+    }
+    if (name === "capture.region" || name === "capture.text") {
+      // Out of the way of the zone being drawn.
+      dispatch({ type: "escape" });
+    }
     send("action", { name });
     if (name === "conversation.reset") dispatch({ type: "conversation.new" });
   };
@@ -358,7 +373,10 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
                     focus={state.focus}
                     onAsk={ask}
                     onAction={action}
-                    onAgent={(task, folder) => send("agent.start", { task, folder })}
+                    onOpenAgent={() => {
+                      env.openApp("agent");
+                      dispatch({ type: "escape" });
+                    }}
                     onRemoveAttachment={() => dispatch({ type: "attachment.remove" })}
                   />
                 )}

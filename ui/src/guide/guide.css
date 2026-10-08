@@ -126,3 +126,45 @@
     opacity: 1;
   }
 }
+
+/* Drawing a zone to show Claude (capture.select). */
+.lw-select {
+  position: fixed;
+  inset: 0;
+  cursor: crosshair;
+  user-select: none;
+}
+.lw-select-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--lw-guide-scrim);
+}
+.lw-select-rect {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--lw-color-accent);
+  border-radius: 4px;
+  /* The rest of the screen stays dimmed around the hole. */
+  box-shadow: 0 0 0 100vmax var(--lw-guide-scrim);
+}
+.lw-select-size,
+.lw-select-hint {
+  position: absolute;
+  padding: 2px var(--lw-space-2);
+  border-radius: var(--lw-radius-button);
+  background: var(--lw-color-surface);
+  color: var(--lw-color-text);
+  font-size: var(--lw-size-meta);
+  white-space: nowrap;
+}
+.lw-select-size {
+  left: 0;
+  bottom: calc(100% + var(--lw-space-1));
+}
+.lw-select-hint {
+  top: var(--lw-space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--lw-space-2) var(--lw-space-4);
+  font-size: var(--lw-size-body);
+}

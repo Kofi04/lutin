@@ -161,9 +161,66 @@ pub fn place_panel(app: &AppHandle, width: f64, height: f64) -> tauri::Result<()
 /// in (DESIGN.md section 1: no floating surface steals the focus).
 pub fn show_panel(app: &AppHandle, focus: bool) -> tauri::Result<()> {
     match app.get_webview_window(PANEL) {
-        Some(panel) => set_visible(&panel, true, focus),
+        Some(panel) => {
+            if focus {
+                remember_foreground(app);
+            }
+            set_visible(&panel, true, focus)
+        }
         None => Ok(()),
     }
+}
+
+/// The app that had the keyboard before the panel took it (an HWND), to
+/// give it back: "Sélection" sends Ctrl+C to the window in front, and right
+/// after a click on the panel that would be the panel itself.
+static PREVIOUS_FOREGROUND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+#[cfg(windows)]
+fn remember_foreground(app: &AppHandle) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let front = unsafe { GetForegroundWindow() } as isize;
+    // Not one of ours: the panel shown twice must not remember itself.
+    let ours = app
+        .webview_windows()
+        .values()
+        .any(|w| w.hwnd().map(|h| h.0 as isize == front).unwrap_or(false));
+    if front != 0 && !ours {
+        PREVIOUS_FOREGROUND.store(front, Ordering::SeqCst);
+    }
+}
+
+#[cfg(not(windows))]
+fn remember_foreground(_app: &AppHandle) {}
+
+/// Hide the panel and put the app it took the keyboard from back in front.
+#[tauri::command]
+pub fn panel_release_focus(app: AppHandle) -> Result<(), String> {
+    if let Some(panel) = app.get_webview_window(PANEL) {
+        set_visible(&panel, false, false).map_err(|e| e.to_string())?;
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
+        let previous = PREVIOUS_FOREGROUND.load(Ordering::SeqCst);
+        if previous != 0 && unsafe { IsWindow(previous as _) } != 0 {
+            // Allowed: the foreground is ours (the panel) when this runs.
+            unsafe { SetForegroundWindow(previous as _) };
+        }
+    }
+    Ok(())
+}
+
+/// An overlay takes the mouse while a zone is drawn on it, and lets it
+/// through again after (its normal state: DESIGN.md section 6).
+#[tauri::command]
+pub fn overlay_interactive(window: WebviewWindow, interactive: bool) -> Result<(), String> {
+    if !window.label().starts_with(OVERLAY_PREFIX) {
+        return Ok(());
+    }
+    window
+        .set_ignore_cursor_events(!interactive)
+        .map_err(|e| e.to_string())
 }
 
 /// Show or hide one of our windows: the one way to do it, for all of them.

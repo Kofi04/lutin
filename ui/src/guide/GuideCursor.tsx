@@ -110,10 +110,13 @@ export function GuideCursor({
   client,
   env,
   screenId,
+  held = false,
 }: {
   client: CoreClient;
   env: WindowEnv;
   screenId: string;
+  /** Something else on this overlay needs the window shown (the zone veil). */
+  held?: boolean;
 }) {
   const [state, dispatch] = useReducer(reduceGuide, initialGuide);
   const stateRef = useRef<GuideState>(state);
@@ -211,8 +214,8 @@ export function GuideCursor({
   const visible = onScreen(state, screenId);
   useEffect(() => {
     if (visible) void env.syncOverlays().then(() => env.show());
-    else env.hide();
-  }, [visible, env]);
+    else if (!held) env.hide();
+  }, [visible, held, env]);
 
   const flying = state.mode === "flying" || state.mode === "returning";
   const frame = useFlight(state.from, state.at, flying);

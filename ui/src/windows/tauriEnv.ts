@@ -40,6 +40,8 @@ export const tauriEnv: WindowEnv = {
   startDragging: () => void getCurrentWindow().startDragging(),
   togglePanel: () => void invoke("toggle_panel"),
   openApp: (view) => void invoke("app_window", { view }),
+  setInteractive: (interactive) => void invoke("overlay_interactive", { interactive }),
+  releaseFocus: () => invoke("panel_release_focus"),
   applyAppearance: (scale, clickThrough) =>
     void invoke("avatar_appearance", { scale, clickThrough }),
   setCaptureExclusion: (exclude) => void invoke("capture_exclusion", { exclude }),

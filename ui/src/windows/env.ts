@@ -45,6 +45,10 @@ export interface WindowEnv {
   setCaptureExclusion(exclude: boolean): void;
   /** Files dropped on this window, by path. */
   onFileDrop(listener: (paths: string[]) => void): () => void;
+  /** Overlays: take the mouse (drawing a zone) or let it through. */
+  setInteractive(interactive: boolean): void;
+  /** Panel: hide and hand the keyboard back to the app it was taken from. */
+  releaseFocus(): Promise<void>;
   /** Open (or bring back) the app window on a view, "notes/new" say. */
   openApp(view: string): void;
   /** Tray entries that are core actions, for the avatar to send. */

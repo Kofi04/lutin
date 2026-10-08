@@ -21,6 +21,8 @@ fn main() {
             windows::panel_show,
             windows::window_visible,
             windows::app_window,
+            windows::panel_release_focus,
+            windows::overlay_interactive,
             windows::avatar_anchor,
             windows::avatar_appearance,
             protect::capture_exclusion,

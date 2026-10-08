@@ -53,7 +53,8 @@ export interface BarProps {
   focus: boolean;
   onAsk(text: string): void;
   onAction(name: ActionName): void;
-  onAgent(task: string, folder: string): void;
+  /** The Agent chip: the app window's agent view (task, folder picker). */
+  onOpenAgent(): void;
   onRemoveAttachment(): void;
 }
 
@@ -65,20 +66,18 @@ export function Bar({
   focus,
   onAsk,
   onAction,
-  onAgent,
+  onOpenAgent,
   onRemoveAttachment,
 }: BarProps) {
   const [text, setText] = useState(initialText);
-  const [agent, setAgent] = useState(false);
-  const [folder, setFolder] = useState("");
   const [picked, setPicked] = useState(0);
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (focus) input.current?.focus();
-  }, [focus, agent]);
+  }, [focus]);
 
-  const slash = !agent && text.startsWith("/");
+  const slash = text.startsWith("/");
   const query = slash ? text.slice(1) : null;
   useEffect(() => {
     if (query !== null) onQuery?.(query);
@@ -112,11 +111,7 @@ export function Bar({
       return;
     }
     if (!text.trim()) return;
-    if (agent) {
-      if (!folder.trim()) return;
-      onAgent(text.trim(), folder.trim());
-      setAgent(false);
-    } else onAsk(text.trim());
+    onAsk(text.trim());
     setText("");
   };
 
@@ -143,19 +138,9 @@ export function Bar({
               setPicked((p) => Math.min(p + 1, actions.length - 1));
             if (event.key === "ArrowUp") setPicked((p) => Math.max(p - 1, 0));
           }}
-          placeholder={agent ? "Tâche de l'agent…" : "Demande au sorcier…"}
-          aria-label={agent ? "Tâche de l'agent" : "Question"}
+          placeholder="Demande au sorcier…"
+          aria-label="Question"
         />
-        {agent && (
-          <input
-            className="lw-field"
-            style={{ flex: "0 0 160px" }}
-            value={folder}
-            onChange={(event) => setFolder(event.target.value)}
-            placeholder="Dossier"
-            aria-label="Dossier de l'agent"
-          />
-        )}
         <button className="lw-button accent" type="submit" aria-label="Envoyer">
           <Send size={16} />
         </button>
@@ -204,12 +189,7 @@ export function Bar({
           <button className="lw-chip" onClick={() => onAction("selection")}>
             <TextCursorInput size={14} /> Sélection
           </button>
-          <button
-            className="lw-chip"
-            aria-pressed={agent}
-            style={agent ? { color: "var(--lw-color-accent)" } : undefined}
-            onClick={() => setAgent((a) => !a)}
-          >
+          <button className="lw-chip" onClick={onOpenAgent}>
             <Bot size={14} /> Agent
           </button>
         </div>

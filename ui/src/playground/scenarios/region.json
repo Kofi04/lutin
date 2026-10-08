@@ -1,0 +1,10 @@
+{
+  "name": "Montrer une zone",
+  "description": "Le core demande une zone (bouton Zone, ou Ctrl+Alt+S) : tracez un rectangle sur l'écran ; il est envoyé au core (journal des commandes). Clic droit pour annuler.",
+  "screens": [{ "id": "\\\\.\\DISPLAY1", "width": 1920, "height": 1080 }],
+  "steps": [
+    { "at": 0, "type": "connection", "payload": { "state": "online", "detail": "" } },
+    { "at": 500, "type": "capture.select", "payload": { "mode": "ask" } },
+    { "at": 120000, "type": "capture.select.end", "payload": {} }
+  ]
+}

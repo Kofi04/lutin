@@ -728,7 +728,7 @@ class AvatarApp:
         any longer than that would steal it from every other app.
         """
         if active and self._escape_id is None:
-            self._escape_id = self.hotkeys.grab("escape", self.ui.guide_clear)
+            self._escape_id = self.hotkeys.grab("escape", self.ui.on_escape)
         elif not active and self._escape_id is not None:
             self.hotkeys.release(self._escape_id)
             self._escape_id = None

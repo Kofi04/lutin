@@ -175,3 +175,7 @@ class Presenter:
 
     def show_onboarding(self) -> None:
         pass
+
+    def on_escape(self) -> None:
+        """Escape while the core holds it (a selection or the guide on screen)."""
+        self.guide_clear()

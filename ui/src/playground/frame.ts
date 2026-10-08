@@ -41,6 +41,8 @@ export class Frame {
       applyAppearance: (scale, clickThrough) =>
         hooks.log?.(`${role} : taille ${scale}, clics traversants ${clickThrough}`),
       setCaptureExclusion: () => {},
+      setInteractive: () => {},
+      releaseFocus: async () => this.setVisible(false),
       onFileDrop: () => () => {},
       syncOverlays: async () => {},
       onPointer: hooks.onPointer ?? (() => () => {}),

@@ -111,6 +111,10 @@ class ProtocolPresenter(Presenter):
         self._sessions: list[dict] = []
         self._quiet = False
         self._appearance: dict | None = None
+        #: A rectangle selection on screen, and the guide: Escape is held
+        #: while either is up, and only then.
+        self._selecting = False
+        self._guiding = False
         self._onboarding_pending = False
         self._approval: dict | None = None
         self._approval_timer = QTimer()
@@ -149,7 +153,7 @@ class ProtocolPresenter(Presenter):
             "session.dismiss": lambda client, p: self.app.sessions.forget(
                 p["session_id"]
             ),
-            "guide.active": lambda client, p: self.app._grab_escape(p["active"]),
+            "guide.active": lambda client, p: self._set_guiding(p["active"]),
             "guide.done": lambda client, p: self.guide_clear(),
             "cloak.ack": lambda client, p: self._cloak.ack(client, p["cloak_id"]),
             "action": self._on_action,
@@ -405,7 +409,31 @@ class ProtocolPresenter(Presenter):
         return capture_id
 
     def select_region(self, mode: str) -> None:
+        # The veils are click-through-free windows that never take the
+        # keyboard: Escape reaches them only as the core's global hotkey.
+        self._selecting = True
         self._emit("capture.select", {"mode": mode})
+        self._update_escape()
+
+    def _end_selection(self) -> None:
+        if self._selecting:
+            self._selecting = False
+            self._emit("capture.select.end")
+            self._update_escape()
+
+    def on_escape(self) -> None:
+        """Escape, held by the core: the selection first, then the guide."""
+        if self._selecting:
+            self._end_selection()
+        else:
+            self.guide_clear()
+
+    def _set_guiding(self, active: bool) -> None:
+        self._guiding = active
+        self._update_escape()
+
+    def _update_escape(self) -> None:
+        self.app._grab_escape(self._selecting or self._guiding)
 
     def _on_capture_start(self, client, payload) -> None:
         mode = payload["mode"]
@@ -417,6 +445,8 @@ class ProtocolPresenter(Presenter):
             self.app._start_region("ask")
 
     def _on_capture_region(self, client, payload) -> None:
+        # Every overlay drops its veil before the grab's cloak.
+        self._end_selection()
         x, y = screens.from_screen(
             payload["screen_id"], payload["x"], payload["y"], screens.current_screens()
         )
@@ -450,6 +480,8 @@ class ProtocolPresenter(Presenter):
         capture_id = payload.get("capture_id")
         if capture_id:
             self._previews.pop(capture_id, None)
+        else:
+            self._end_selection()
 
     # -- selection --------------------------------------------------------
 
@@ -532,13 +564,13 @@ class ProtocolPresenter(Presenter):
 
     def guide_point(self, x: float, y: float, label: str) -> None:
         self._emit("guide.point", _point(x, y, label))
-        self.app._grab_escape(True)
+        self._set_guiding(True)
 
     def guide_highlight(
         self, left: float, top: float, width: float, height: float, label: str, shape: str
     ) -> None:
         self._emit("guide.highlight", _box(left, top, width, height, label, shape))
-        self.app._grab_escape(True)
+        self._set_guiding(True)
 
     def guide_steps(self, steps: list) -> None:
         payload = []
@@ -559,11 +591,11 @@ class ProtocolPresenter(Presenter):
                 }
             payload.append({"text": step.text, "target": target})
         self._emit("guide.steps", {"steps": payload})
-        self.app._grab_escape(True)
+        self._set_guiding(True)
 
     def guide_clear(self) -> None:
         self._emit("guide.clear")
-        self.app._grab_escape(False)
+        self._set_guiding(False)
 
     # -- the app window ---------------------------------------------------
 

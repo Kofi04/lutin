@@ -152,6 +152,7 @@ export interface CorePayloads {
   };
   "approval.cancel": { request_id: string };
   "capture.select": { mode: "ask" | "text" };
+  "capture.select.end": Record<string, never>;
   "capture.preview": {
     capture_id: string;
     kind: CaptureKind;

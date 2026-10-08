@@ -176,6 +176,11 @@
       "doc": "Let the user draw a rectangle on screen, then answer with capture.region or capture.cancel.",
       "payload": { "mode": ["ask", "text"] }
     },
+    "capture.select.end": {
+      "from": "core",
+      "doc": "The rectangle selection is over (a rectangle was drawn on one screen, or Escape): every overlay drops its veil.",
+      "payload": {}
+    },
     "capture.preview": {
       "from": "core",
       "doc": "Exactly what would be sent. Nothing leaves without capture.confirm.",
