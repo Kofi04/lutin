@@ -21,10 +21,13 @@ window picker still had until this module replaced its immediate grab.
 from __future__ import annotations
 
 import itertools
+import logging
 import weakref
 from collections.abc import Callable
 
 from PySide6.QtCore import QTimer
+
+log = logging.getLogger(__name__)
 
 #: Long enough for DWM to recompose after a hide on a loaded machine; short
 #: enough that the avatar's absence is a flicker, not a disappearance.
@@ -174,6 +177,10 @@ class RemoteCloak:
             self._finish(cloak_id)
 
     def _abort(self) -> None:
+        # Name who did not answer: without it, "could not hide in time" says
+        # nothing about which window to look at.
+        late = sorted(getattr(c, "role", "?") or "?" for c in self._waiting)
+        log.warning("cloak %s: no cloak.ack from %s", self._current, ", ".join(late))
         cloak_id, on_abort = self._current, self._on_abort
         self._finish(cloak_id)
         if on_abort is not None:

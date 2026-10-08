@@ -426,8 +426,13 @@ pub fn avatar_appearance(app: AppHandle, scale: f64, click_through: bool) -> Res
     run().map_err(|e| e.to_string())
 }
 
+// The two commands below may create a window. They must be async: a
+// synchronous command runs on the main thread, and creating a window there
+// on Windows deadlocks the whole app (wry#583, in Tauri's own docs). Found by
+// opening the app window from a page: the call never returned and every
+// window froze.
 #[tauri::command]
-pub fn app_window(app: AppHandle, view: String) -> Result<(), String> {
+pub async fn app_window(app: AppHandle, view: String) -> Result<(), String> {
     open_app_window(&app, &view).map_err(|e| e.to_string())
 }
 
@@ -438,7 +443,7 @@ pub fn window_visible(window: WebviewWindow, visible: bool, focus: bool) -> Resu
 }
 
 #[tauri::command]
-pub fn overlays_sync(app: AppHandle) -> Result<(), String> {
+pub async fn overlays_sync(app: AppHandle) -> Result<(), String> {
     sync_overlays(&app).map_err(|e| e.to_string())
 }
 
