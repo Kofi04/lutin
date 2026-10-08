@@ -297,8 +297,6 @@ Issues and pull requests are welcome. Before a pull request:
   [coucou](https://github.com/louis-cfm/coucou) (macOS, MIT): its architecture
   and behaviours inspired this one. Its name, character, icon and sounds are its
   author's and are not used here.
-- The flying guide cursor is inspired by
-  [Clicky](https://github.com/farzaa/clicky) (MIT).
 - Built with [Tauri](https://tauri.app), [React](https://react.dev),
   [Motion](https://motion.dev), [Lucide](https://lucide.dev) icons,
   [PySide6](https://doc.qt.io/qtforpython-6/) and the
