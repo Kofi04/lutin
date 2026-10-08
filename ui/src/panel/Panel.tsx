@@ -56,7 +56,10 @@ const SELECTION_DELAY_MS = 150;
 const EXIT_MS = 180;
 
 const enter = { opacity: 1, scale: 1, y: 0 };
-const hidden = { opacity: 0, scale: 0.96, y: 6 };
+const hidden = { opacity: 0, scale: 0.96, y: -6 };
+/** The island closed: a small black pill, as it is born and as it goes. */
+const pill = { opacity: 0, scaleX: 0.28, scaleY: 0.45, y: -4 };
+const island = { opacity: 1, scaleX: 1, scaleY: 1, y: 0 };
 
 export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
   const [state, dispatch] = useReducer(reduce, initial);
@@ -312,27 +315,99 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
           style={{
             display: "flex",
             flexDirection: "column",
-            alignItems: "flex-end",
+            alignItems: "center",
             gap: "var(--lw-space-2)",
           }}
         >
           <AnimatePresence initial={false}>
-            {state.toasts.map((toast) => (
+            {view !== "hidden" && (
+              // The island: born as a small pill at the top of the screen,
+              // it stretches into whatever view is open, and changes size
+              // smoothly between them (layout), like a phone's Dynamic Island.
               <motion.div
-                key={`toast-${toast.id}`}
+                key="island"
+                className="lw-island"
                 layout
-                initial={hidden}
-                animate={enter}
-                exit={hidden}
-                style={{ transformOrigin: "bottom right" }}
+                initial={pill}
+                animate={island}
+                exit={{ ...pill, transition: { duration: EXIT_MS / 1000 } }}
+                transition={{ type: "spring", ...springs.island }}
+                style={{ transformOrigin: "top center" }}
               >
-                <ToastView
-                  toast={toast}
-                  lifetimeMs={TOAST_MS}
-                  onDismiss={() => dispatch({ type: "toast.dismiss", id: toast.id })}
-                />
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={view}
+                    layout="position"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1, transition: { delay: 0.08 } }}
+                    exit={{ opacity: 0, transition: { duration: 0.08 } }}
+                  >
+                    {view === "bar" && sessions.length > 0 && (
+                      <div style={{ marginBottom: "var(--lw-space-2)" }}>
+                        <SessionsCard
+                          sessions={sessions}
+                          onStop={(agentId) => send("agent.stop", { agent_id: agentId })}
+                          onDismiss={(sessionId) =>
+                            send("session.dismiss", { session_id: sessionId })
+                          }
+                        />
+                      </div>
+                    )}
+                    {view === "bar" && (
+                      <Bar
+                        key={state.palette}
+                        initialText={state.prefill}
+                        extra={slashExtra}
+                        onQuery={onQuery}
+                        attachment={state.attachment}
+                        focus={state.focus}
+                        onAsk={ask}
+                        onAction={action}
+                        onOpenAgent={() => {
+                          env.openApp("agent");
+                          dispatch({ type: "escape" });
+                        }}
+                        onRemoveAttachment={() => dispatch({ type: "attachment.remove" })}
+                      />
+                    )}
+                    {view === "answer" && state.answer && (
+                      <AnswerView
+                        answer={state.answer}
+                        onAsk={ask}
+                        onNew={() => action("conversation.reset")}
+                        onCopy={copy}
+                      />
+                    )}
+                    {view === "approval" && state.approval && (
+                      <ApprovalView request={state.approval} onDecide={decideApproval} />
+                    )}
+                    {view === "capture" && state.preview && (
+                      <CaptureView preview={state.preview} onDecide={decideCapture} />
+                    )}
+                    {view === "selection" && state.selection && (
+                      <SelectionView
+                        selection={state.selection}
+                        onPick={(key) => {
+                          send("selection.pick", {
+                            selection_id: state.selection!.id,
+                            action: key,
+                          });
+                          dispatch({ type: "selection.picked", action: key });
+                        }}
+                        onCopy={copy}
+                        onReplace={(text) => {
+                          send("selection.replace", {
+                            selection_id: state.selection!.id,
+                            text,
+                          });
+                          dispatch({ type: "escape" });
+                        }}
+                      />
+                    )}
+                  </motion.div>
+                </AnimatePresence>
               </motion.div>
-            ))}
+            )}
           </AnimatePresence>
           {state.guide && (
             <StepsCard
@@ -342,80 +417,23 @@ export function Panel({ client, env }: { client: CoreClient; env: WindowEnv }) {
               onDone={() => send("guide.done", {})}
             />
           )}
-          <AnimatePresence mode="wait" initial={false}>
-            {view !== "hidden" && (
+          <AnimatePresence initial={false}>
+            {state.toasts.map((toast) => (
               <motion.div
-                key={view}
+                key={`toast-${toast.id}`}
+                layout
                 initial={hidden}
                 animate={enter}
-                exit={{ ...hidden, transition: { duration: EXIT_MS / 1000 } }}
-                // Born from the avatar, below and to the right.
-                style={{ transformOrigin: "bottom right" }}
+                exit={hidden}
+                style={{ transformOrigin: "top center" }}
               >
-                {view === "bar" && sessions.length > 0 && (
-                  <div style={{ marginBottom: "var(--lw-space-2)" }}>
-                    <SessionsCard
-                      sessions={sessions}
-                      onStop={(agentId) => send("agent.stop", { agent_id: agentId })}
-                      onDismiss={(sessionId) =>
-                        send("session.dismiss", { session_id: sessionId })
-                      }
-                    />
-                  </div>
-                )}
-                {view === "bar" && (
-                  <Bar
-                    key={state.palette}
-                    initialText={state.prefill}
-                    extra={slashExtra}
-                    onQuery={onQuery}
-                    attachment={state.attachment}
-                    focus={state.focus}
-                    onAsk={ask}
-                    onAction={action}
-                    onOpenAgent={() => {
-                      env.openApp("agent");
-                      dispatch({ type: "escape" });
-                    }}
-                    onRemoveAttachment={() => dispatch({ type: "attachment.remove" })}
-                  />
-                )}
-                {view === "answer" && state.answer && (
-                  <AnswerView
-                    answer={state.answer}
-                    onAsk={ask}
-                    onNew={() => action("conversation.reset")}
-                    onCopy={copy}
-                  />
-                )}
-                {view === "approval" && state.approval && (
-                  <ApprovalView request={state.approval} onDecide={decideApproval} />
-                )}
-                {view === "capture" && state.preview && (
-                  <CaptureView preview={state.preview} onDecide={decideCapture} />
-                )}
-                {view === "selection" && state.selection && (
-                  <SelectionView
-                    selection={state.selection}
-                    onPick={(key) => {
-                      send("selection.pick", {
-                        selection_id: state.selection!.id,
-                        action: key,
-                      });
-                      dispatch({ type: "selection.picked", action: key });
-                    }}
-                    onCopy={copy}
-                    onReplace={(text) => {
-                      send("selection.replace", {
-                        selection_id: state.selection!.id,
-                        text,
-                      });
-                      dispatch({ type: "escape" });
-                    }}
-                  />
-                )}
+                <ToastView
+                  toast={toast}
+                  lifetimeMs={TOAST_MS}
+                  onDismiss={() => dispatch({ type: "toast.dismiss", id: toast.id })}
+                />
               </motion.div>
-            )}
+            ))}
           </AnimatePresence>
         </div>
       </div>

@@ -163,6 +163,14 @@ Pourquoi : chaque image d'une fenêtre transparente au premier plan est recompos
 
 Le panneau naît de l'avatar et se transforme. Machine à états :
 
+> **Révisé après M7 — façon Dynamic Island.** Le panneau ne vit plus au-dessus de l'avatar
+> mais **en haut au centre de l'écran de l'avatar**, et grandit vers le bas. C'est une seule
+> surface **noire** (`--lw-color-island`, coins de 24 px) qui naît comme une petite pilule,
+> s'étire jusqu'à la vue ouverte et change de taille en douceur d'une vue à l'autre
+> (ressort `island` : ~5 % de rebond, pas celui de `bouncy`). Le contenu fait un fondu à
+> l'intérieur. Les toasts et la carte d'étapes du guide se rangent dessous, centrés.
+> L'avatar reste chez lui et garde son rôle de témoin d'état.
+
 ```
 hidden ──clic/hotkey──▶ bar ──Entrée──▶ answer ──Esc──▶ hidden
    │                     ▲                 │

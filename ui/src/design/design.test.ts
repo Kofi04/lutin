@@ -35,7 +35,7 @@ describe("tokens", () => {
       Object.keys(colors).length +
         Object.keys(stage).length +
         Object.keys(guide).length +
-        4 +
+        5 +
         6 +
         1 +
         2 +
@@ -73,6 +73,13 @@ describe("springs", () => {
     expect(peak(springs.bouncy)).toBeGreaterThan(1.2);
     expect(peak(springs.snappy)).toBeLessThan(1.05);
     expect(peak(springs.smooth)).toBeLessThan(1.05);
+  });
+
+  it("the island rebounds a little, far less than bouncy", () => {
+    let max = 0;
+    for (let t = 0; t < 1.5; t += 0.002) max = Math.max(max, springAt(springs.island, t));
+    expect(max).toBeGreaterThan(1.02);
+    expect(max).toBeLessThan(1.08);
   });
 
   it("an overdamped spring never overshoots", () => {

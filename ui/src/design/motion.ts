@@ -18,6 +18,8 @@ export const springs = {
   snappy: { stiffness: 520, damping: 38 },
   smooth: { stiffness: 320, damping: 32 },
   bouncy: { stiffness: 420, damping: 16 },
+  /** The island opening and changing size: a small rebound (~5 %), not bouncy's. */
+  island: { stiffness: 380, damping: 27 },
 } as const satisfies Record<string, Spring>;
 
 /** The guide cursor's flight: a duration, not a spring (DESIGN.md section 6). */

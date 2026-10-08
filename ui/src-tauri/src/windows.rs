@@ -126,8 +126,9 @@ pub fn toggle(app: &AppHandle) {
     let _ = app.emit_to(PANEL, "panel://toggle", ());
 }
 
-/// Size the panel and put it above the avatar, right edges aligned, kept
-/// inside the avatar's screen. Sizes are logical (CSS) pixels.
+/// Size the panel and put it at the top centre of the avatar's screen, like
+/// a phone's Dynamic Island (DESIGN.md section 5): it grows downward from
+/// there. Sizes are logical (CSS) pixels.
 pub fn place_panel(app: &AppHandle, width: f64, height: f64) -> tauri::Result<()> {
     let (Some(avatar), Some(panel)) = (
         app.get_webview_window(AVATAR),
@@ -141,18 +142,12 @@ pub fn place_panel(app: &AppHandle, width: f64, height: f64) -> tauri::Result<()
         (height * scale).round() as u32,
     );
     panel.set_size(size)?;
-    let anchor = avatar.outer_position()?;
-    let anchor_size = avatar.outer_size()?;
-    let mut x = anchor.x + anchor_size.width as i32 - size.width as i32;
-    let mut y = anchor.y - size.height as i32;
-    if let Some(monitor) = avatar.current_monitor()? {
-        let area = monitor.work_area();
-        let (left, top) = (area.position.x, area.position.y);
-        let right = left + area.size.width as i32 - size.width as i32;
-        let bottom = top + area.size.height as i32 - size.height as i32;
-        x = x.clamp(left, right.max(left));
-        y = y.clamp(top, bottom.max(top));
-    }
+    let Some(monitor) = avatar.current_monitor()?.or(avatar.primary_monitor()?) else {
+        return Ok(());
+    };
+    let area = monitor.work_area();
+    let x = area.position.x + (area.size.width as i32 - size.width as i32) / 2;
+    let y = area.position.y;
     panel.set_position(PhysicalPosition::new(x, y))
 }
 

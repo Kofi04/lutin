@@ -9,6 +9,8 @@
 export const colors = {
   /** The app window (DESIGN.md section 9): opaque, the floating surface's tone. */
   window: "#141418",
+  /** The panel at the top of the screen, like a phone's Dynamic Island: true black. */
+  island: "#000000",
   surface: "rgba(16,16,20,0.94)",
   surfaceRaised: "rgba(30,30,36,0.96)",
   border: "rgba(255,255,255,0.08)",
@@ -56,7 +58,7 @@ export const stage = {
   wallpaper: "#323A4D",
 } as const;
 
-export const radii = { button: 8, field: 12, panel: 18, pill: 999 } as const;
+export const radii = { button: 8, field: 12, panel: 18, island: 24, pill: 999 } as const;
 
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24 } as const;
 
