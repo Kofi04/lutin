@@ -242,9 +242,9 @@ def test_one_hit_per_conversation_with_a_snippet(history):
 
 
 def test_a_title_match_is_found_without_a_message_match(history):
-    cid = history.start(title="Projet Koffi")
+    cid = history.start(title="Projet Awa")
 
-    assert [h.conversation.id for h in history.search("koffi")] == [cid]
+    assert [h.conversation.id for h in history.search("awa")] == [cid]
 
 
 # -- retention --------------------------------------------------------------

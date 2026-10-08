@@ -161,11 +161,11 @@ def test_check_hotkeys_reports_conflicts_and_unknown_keys(rpc):
 
 
 def test_settings_write_saves_the_memory(rpc):
-    rpc.call("settings.write", {"values": {}, "memory": "Je m'appelle Tim."})
+    rpc.call("settings.write", {"values": {}, "memory": "Je m'appelle Awa."})
     data = rpc.call("settings.read", {})
     assert data["memory"] == {
         **data["memory"],
-        "text": "Je m'appelle Tim.",
+        "text": "Je m'appelle Awa.",
         "from_file": True,
     }
 

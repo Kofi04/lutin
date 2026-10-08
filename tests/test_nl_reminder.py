@@ -14,7 +14,7 @@ NOON = datetime(2026, 10, 1, 12, 0, 0)
 @pytest.mark.parametrize(
     ("text", "seconds", "label"),
     [
-        ("rappelle-moi dans 20 minutes d'appeler Koffi", 1200, "Appeler Koffi"),
+        ("rappelle-moi dans 20 minutes d'appeler Awa", 1200, "Appeler Awa"),
         ("Rappelle moi dans 1h30 de relancer le client", 5400, "Relancer le client"),
         ("rappel dans 2 h réunion budget", 7200, "Réunion budget"),
         ("rappelle-moi dans une heure de sortir", 3600, "Sortir"),
@@ -64,8 +64,8 @@ def test_without_a_label_it_is_just_a_reminder():
 @pytest.mark.parametrize(
     "text",
     [
-        "appelle Koffi dans 20 minutes",  # no trigger: not a reminder request
-        "rappelle-moi d'appeler Koffi",  # no time: guessing one would be worse
+        "appelle Awa dans 20 minutes",  # no trigger: not a reminder request
+        "rappelle-moi d'appeler Awa",  # no time: guessing one would be worse
         "rappel à 27h",  # not a time
         "rappelle-moi dans 400 heures",  # past a week: almost certainly a mistake
         "",
@@ -98,11 +98,11 @@ def test_claude_can_set_a_reminder_through_its_tool():
     handlers = build_handlers(bridge, lambda: None)
 
     result = asyncio.run(
-        handlers["set_reminder"]({"minutes": 20, "label": "Appeler Koffi"})
+        handlers["set_reminder"]({"minutes": 20, "label": "Appeler Awa"})
     )
 
     # Works without any screen capture, and tells Claude it is volatile.
-    assert seen == [(1200, "Appeler Koffi")]
+    assert seen == [(1200, "Appeler Awa")]
     assert "perdu" in result["content"][0]["text"]
 
 

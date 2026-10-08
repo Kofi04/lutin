@@ -1,6 +1,6 @@
 """Reminders written the way people say them.
 
-"rappelle-moi dans 20 minutes d'appeler Koffi", "rappel à 15h30 réunion",
+"rappelle-moi dans 20 minutes d'appeler Awa", "rappel à 15h30 réunion",
 "rappelle-moi d'arroser les plantes dans une heure et demie".
 
 Deliberately small: one relative delay ("dans …") or one clock time ("à …"),
