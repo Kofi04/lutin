@@ -107,8 +107,8 @@ Requirements: Windows 10/11, Python 3.11+ (tested on 3.14), Node 20+, Rust
 (`rustup`, MSVC toolchain), and Claude Code logged in.
 
 ```powershell
-git clone https://github.com/Kofi04/lutin.git
-cd lutin
+git clone https://github.com/Kofi04/little-wizard.git
+cd little-wizard
 py -3.14 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 cd ui
