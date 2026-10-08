@@ -847,6 +847,14 @@ un seul écran ici).
 Le dossier `target/embedded` a été reconstruit (18 min, une seule tâche à la fois : avec 3,7 Go
 de RAM, la compilation parallèle de la crate `tauri` fait planter rustc).
 
+**Complément (après M7)** — la consigne « Phase 6 » relue contre M6 : le pointeur est
+envoyé aux overlays à 60 Hz (16 ms) pendant une interaction ; la conversion s'appelle
+`screenToOverlay()` et le composant `GuideCursor` ; scénario de terrain d'essai « Claude
+montre où cliquer en 3 étapes ». Le rendu reste en SVG/DOM (choix confirmé). Corrigés au
+passage : la fenêtre app blanche en build de production (ordre des feuilles CSS) et les
+hooks jamais « déjà installés » à côté de ceux de Coucou (nos entrées déplacées en fin de
+liste à chaque fois).
+
 ### Phase M6 bis — Fenêtres secondaires (proposée, voir plus haut)
 
 Paramètres, Historique, Accueil, confirmation des hooks, lancement d'agent, en

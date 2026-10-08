@@ -21,8 +21,10 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::windows::{AVATAR, OVERLAY_PREFIX};
 
 const PERIOD: Duration = Duration::from_millis(120);
-/// While the guide follows the pointer: smooth enough for a cursor beside it.
-const GUIDE_PERIOD: Duration = Duration::from_millis(40);
+/// While the guide follows the pointer: 60 Hz, a display's own rate, so the
+/// companion cursor moves with the real one. Still only while an overlay
+/// listens, and only when the pointer moved: a still mouse sends nothing.
+const GUIDE_PERIOD: Duration = Duration::from_millis(16);
 const GUIDE_MIN_MOVE: i32 = 3;
 
 /// The overlays showing the guide, which want the pointer. A set, not a

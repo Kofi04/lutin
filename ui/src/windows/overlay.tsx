@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 
 import { installTokens } from "../design/tokens";
-import { GuideOverlay } from "../guide/GuideOverlay";
+import { GuideCursor } from "../guide/GuideCursor";
 import { createClient } from "./connect";
 import { tauriEnv } from "./tauriEnv";
 
@@ -11,5 +11,5 @@ installTokens();
 const screenId = new URLSearchParams(location.search).get("screen") ?? "";
 
 createRoot(document.getElementById("root")!).render(
-  <GuideOverlay client={createClient("overlay")} env={tauriEnv} screenId={screenId} />,
+  <GuideCursor client={createClient("overlay")} env={tauriEnv} screenId={screenId} />,
 );

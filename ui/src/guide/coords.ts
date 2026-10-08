@@ -44,7 +44,7 @@ export function monitorAt(point: Point, monitors: readonly Monitor[]): Monitor |
 }
 
 /** A physical desktop point, in the CSS pixels of `monitor`'s overlay window. */
-export function toOverlay(point: Point, monitor: Monitor): Point {
+export function screenToOverlay(point: Point, monitor: Monitor): Point {
   return {
     x: (point.x - monitor.x) / monitor.scale,
     y: (point.y - monitor.y) / monitor.scale,

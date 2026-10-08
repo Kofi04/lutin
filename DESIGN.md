@@ -268,7 +268,7 @@ Claude estime les coordonnées à partir de l'image, avec quelques pixels d'erre
 - **Les boutons Précédent / Suivant / Terminer** sont une carte du panneau, affichée sans prendre le focus pendant un tutoriel ; Terminer envoie `guide.done`.
 - **Une cible que personne n'efface** disparaît après 12 s ; l'overlay de son écran envoie alors `guide.done`, pour que le core libère Esc et que toutes les fenêtres (l'orbe de l'avatar compris) se remettent d'accord. L'orbe reste éteinte jusqu'au `guide.clear` qui suit.
 - **Le curseur atterrit au centre** d'une zone surlignée.
-- **Coût nul au repos, mesuré** : un overlay sans rien à montrer est caché, et le pointeur ne lui est envoyé (par Rust, toutes les 40 ms et seulement s'il a bougé de 3 px) que pendant qu'il le suit.
+- **Coût nul au repos, mesuré** : un overlay sans rien à montrer est caché, et le pointeur ne lui est envoyé (par Rust, à 60 Hz — toutes les 16 ms — et seulement s'il a bougé de 3 px ; 40 ms en M6, passé à 60 Hz ensuite à la demande) que pendant qu'il le suit.
 - La précision par UI Automation (phase 2 ci-dessus) n'est pas faite.
 
 ---

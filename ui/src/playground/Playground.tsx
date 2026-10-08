@@ -19,7 +19,7 @@ import { AvatarCanvas } from "../avatar/AvatarCanvas";
 import { VISUAL_STATES } from "../avatar/state";
 import type { ActionName } from "../protocol";
 import { AvatarView } from "../windows/AvatarView";
-import { GuideOverlay } from "../guide/GuideOverlay";
+import { GuideCursor } from "../guide/GuideCursor";
 import { Panel } from "../panel/Panel";
 import { Desk } from "./desk";
 import { Frame } from "./frame";
@@ -322,11 +322,7 @@ function Run({
                   transformOrigin: "0 0",
                 }}
               >
-                <GuideOverlay
-                  client={frame.client}
-                  env={frame.env}
-                  screenId={screen.id}
-                />
+                <GuideCursor client={frame.client} env={frame.env} screenId={screen.id} />
               </div>
             </div>
           </WindowBox>

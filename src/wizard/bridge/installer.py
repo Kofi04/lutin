@@ -181,20 +181,44 @@ def remove_hooks(settings: dict) -> dict:
 def merge_hooks(settings: dict, ours: dict) -> dict:
     """Add our entries next to whatever is already there.
 
-    Removes any previous Little Wizard entry first, so re-running the installer after
-    moving the project updates the paths instead of stacking duplicates.
+    Our previous entries are replaced where they stand, so re-running the
+    installer after moving the project updates the paths instead of stacking
+    duplicates. In place, not moved to the end: with another tool's hooks on
+    the same events (Coucou, say), moving ours behind them on every install
+    meant the plan was never "nothing to do", and its diff, all reordering,
+    hid whether the hooks were installed at all.
     """
-    result = remove_hooks(settings)
-    hooks = result.setdefault("hooks", {})
+    result = copy.deepcopy(settings)
+    hooks = result.get("hooks")
     if not isinstance(hooks, dict):
         hooks = {}
         result["hooks"] = hooks
 
-    for event, groups in ours.items():
+    for event, groups in list(hooks.items()):
+        if event not in ours and isinstance(groups, list):
+            # An event we no longer use: drop our stale entries, keep the rest.
+            kept = [g for g in groups if not (isinstance(g, dict) and _is_ours(g))]
+            if kept:
+                hooks[event] = kept
+            else:
+                del hooks[event]
+
+    for event, wanted in ours.items():
         existing = hooks.get(event)
         if not isinstance(existing, list):
             existing = []
-        hooks[event] = existing + copy.deepcopy(groups)
+        merged: list = []
+        placed = False
+        for group in existing:
+            if isinstance(group, dict) and _is_ours(group):
+                if not placed:
+                    merged.extend(copy.deepcopy(wanted))
+                    placed = True
+                continue
+            merged.append(group)
+        if not placed:
+            merged.extend(copy.deepcopy(wanted))
+        hooks[event] = merged
     return result
 
 

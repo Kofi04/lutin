@@ -15,7 +15,7 @@ import type { CoreClient } from "../core/client";
 import { prefersReducedMotion, springs } from "../design/motion";
 import type { CorePayloads, ScreenPoint } from "../protocol";
 import type { WindowEnv } from "../windows/env";
-import { type Monitor, monitorAt, type Point, toOverlay } from "./coords";
+import { type Monitor, monitorAt, type Point, screenToOverlay } from "./coords";
 import { type FlightFrame, frameAt, plan } from "./flight";
 import "./guide.css";
 import {
@@ -106,7 +106,7 @@ function useFlight(
   return frame;
 }
 
-export function GuideOverlay({
+export function GuideCursor({
   client,
   env,
   screenId,
@@ -128,7 +128,7 @@ export function GuideOverlay({
   const spot = (point: Point | null): Spot | null => {
     if (!point) return null;
     const monitor = monitorAt(point, monitors.current);
-    return monitor ? { screen: monitor.id, ...toOverlay(point, monitor) } : null;
+    return monitor ? { screen: monitor.id, ...screenToOverlay(point, monitor) } : null;
   };
   const avatarSpot = async () => spot(await env.avatarAnchor());
 

@@ -1,5 +1,16 @@
 /* The app window (DESIGN.md section 9). Every value is a --lw-* token. */
 
+/* An ordinary window: opaque, unlike the floating ones. A class, not plain
+   html/body selectors: in the production build base.css (background:
+   transparent) is linked after this sheet, and at equal specificity the
+   later rule won, leaving WebView2's white behind light text. */
+.lw-app-page,
+.lw-app-page body,
+.lw-app-page #root {
+  background: var(--lw-color-window);
+  user-select: text;
+}
+
 .lw-app {
   display: flex;
   height: 100%;

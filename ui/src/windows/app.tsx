@@ -8,6 +8,7 @@ import { appEnv } from "./appEnv";
 import { createClient } from "./connect";
 
 installTokens();
+document.documentElement.classList.add("lw-app-page");
 
 createRoot(document.getElementById("root")!).render(
   <AppWindow client={createClient("app")} env={appEnv} initial={location.hash} />,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
 import pytest
@@ -138,6 +139,34 @@ def test_installing_twice_does_not_duplicate():
 
     assert len(twice["hooks"]["PreToolUse"]) == len(once["hooks"]["PreToolUse"])
 
+
+
+def test_reinstalling_beside_another_tool_changes_nothing():
+    """Ours first, another tool's after: re-installing must be a no-op, not a
+    reordering that leaves the plan forever "changed"."""
+    other = {"hooks": [{"type": "command", "command": "coucou-hook.exe"}]}
+    installed = installer.merge_hooks({}, hooks())
+    for groups in installed["hooks"].values():
+        groups.append(copy.deepcopy(other))
+
+    again = installer.merge_hooks(installed, hooks())
+
+    assert again == installed
+
+
+def test_a_moved_project_is_updated_in_place():
+    old = installer.build_hooks(
+        launcher="C:/old/pythonw.exe", script="C:/old/wizard_hook.py"
+    )
+    first = {"hooks": [{"command": "first.exe"}]}
+    settings = {"hooks": {event: [first, *groups] for event, groups in old.items()}}
+
+    updated = installer.merge_hooks(settings, hooks())
+
+    groups = updated["hooks"]["PreToolUse"]
+    assert groups[0]["hooks"][0]["command"] == "first.exe"
+    assert "C:/old" not in json.dumps(updated)
+    assert len(groups) == 2
 
 def test_uninstall_removes_only_ours():
     merged = installer.merge_hooks(foreign(), hooks())

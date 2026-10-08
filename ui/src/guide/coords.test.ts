@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type Monitor, monitorAt, overlaySize, toOverlay } from "./coords";
+import { type Monitor, monitorAt, overlaySize, screenToOverlay } from "./coords";
 
 // The primary at 150 %, and one to its left, higher up, at 100 %: Windows
 // gives the second negative coordinates.
@@ -27,8 +27,8 @@ describe("one conversion, desktop -> overlay window", () => {
     "at %s, the corner is 0,0 and the far edge the CSS size",
     (scale) => {
       const m: Monitor = { ...PRIMARY, width: 1600 * scale, height: 900 * scale, scale };
-      expect(toOverlay({ x: 0, y: 0 }, m)).toEqual({ x: 0, y: 0 });
-      expect(toOverlay({ x: 1600 * scale, y: 900 * scale }, m)).toEqual({
+      expect(screenToOverlay({ x: 0, y: 0 }, m)).toEqual({ x: 0, y: 0 });
+      expect(screenToOverlay({ x: 1600 * scale, y: 900 * scale }, m)).toEqual({
         x: 1600,
         y: 900,
       });
@@ -37,12 +37,12 @@ describe("one conversion, desktop -> overlay window", () => {
   );
 
   it("a monitor with negative coordinates", () => {
-    expect(toOverlay({ x: -1900, y: -150 }, LEFT)).toEqual({ x: 20, y: 50 });
+    expect(screenToOverlay({ x: -1900, y: -150 }, LEFT)).toEqual({ x: 20, y: 50 });
   });
 
   it("each monitor divides by its own scale, not the primary's", () => {
-    expect(toOverlay({ x: 300, y: 150 }, PRIMARY)).toEqual({ x: 200, y: 100 });
-    expect(toOverlay({ x: -1620, y: -50 }, LEFT)).toEqual({ x: 300, y: 150 });
+    expect(screenToOverlay({ x: 300, y: 150 }, PRIMARY)).toEqual({ x: 200, y: 100 });
+    expect(screenToOverlay({ x: -1620, y: -50 }, LEFT)).toEqual({ x: 300, y: 150 });
   });
 });
 
