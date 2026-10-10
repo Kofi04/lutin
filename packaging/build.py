@@ -109,6 +109,15 @@ def bundle() -> None:
     # One compile job at a time: the release build of the `tauri` crate in
     # parallel runs out of memory on a 4 GB machine.
     env = {**os.environ, "CARGO_BUILD_JOBS": os.environ.get("CARGO_BUILD_JOBS", "1")}
+    # The compiler writes source paths into the binary (the dependencies'
+    # panic messages): the builder's home folder, user name included, would
+    # ship to everyone who downloads the installer. Rewrite those prefixes.
+    # Computed here, on the building machine, so no path is in the repository.
+    # The encoded variable (one flag per \x1f) takes paths with spaces.
+    remaps = [(Path.home(), "~"), (ROOT, "little-wizard")]
+    env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(
+        f"--remap-path-prefix={source}={target}" for source, target in remaps
+    )
     run([npm, "run", "tauri", "build"], cwd=UI, env=env)
 
 
